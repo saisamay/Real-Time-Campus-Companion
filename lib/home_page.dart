@@ -100,7 +100,6 @@ class _HomePageState extends State<HomePage> {
             title: const Text("Settings"),
             onTap: () => Navigator.pop(context),
           ),
-          const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text("Logout"),
