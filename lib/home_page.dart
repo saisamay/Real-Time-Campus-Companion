@@ -9,14 +9,15 @@ import 'find_classroom_page.dart';
 class HomePage extends StatefulWidget {
   final String universityName;
 
-  const HomePage({super.key, required this.universityName});
+  const HomePage({super.key, required this.universityName, required userName});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<String> eventImages = [
+  // make this const since it's static
+  final List<String> eventImages = const [
     'https://picsum.photos/800/400?random=1',
     'https://picsum.photos/800/400?random=2',
     'https://picsum.photos/800/400?random=3',
@@ -46,11 +47,12 @@ class _HomePageState extends State<HomePage> {
       ),
       drawer: Drawer(
         child: ListView(padding: EdgeInsets.zero, children: [
-          const UserAccountsDrawerHeader(
-            decoration: BoxDecoration(color: Color(0xFFA4123F)),
-            currentAccountPicture: CircleAvatar(backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
-            accountName: Text("Student Name"),
-            accountEmail: Text("student@university.edu"),
+          // <-- removed const here because NetworkImage is non-const
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(color: Color(0xFFA4123F)),
+            currentAccountPicture: const CircleAvatar(backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
+            accountName: const Text("Student Name"),
+            accountEmail: const Text("student@university.edu"),
           ),
           ListTile(
             leading: const Icon(Icons.home),
