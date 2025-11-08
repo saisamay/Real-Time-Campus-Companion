@@ -3,8 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'find_teacher_page.dart';
-// import the new page
+import 'main.dart';
 import 'find_classroom_page.dart';
+import 'timetable_page.dart';
 
 class HomePage extends StatefulWidget {
   final String universityName;
@@ -88,8 +89,11 @@ class _HomePageState extends State<HomePage> {
             leading: const Icon(Icons.schedule),
             title: const Text("Timetable"),
             onTap: () {
-              Navigator.pop(context);
-              // TODO: navigate to own timetable page
+              Navigator.pop(context); // close the drawer first
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TimetablePage()),
+              );
             },
           ),
           ListTile(
@@ -105,8 +109,16 @@ class _HomePageState extends State<HomePage> {
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text("Logout"),
-            onTap: () => Navigator.pop(context),
+            onTap: () {
+              Navigator.pop(context); // close the drawer first
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginPage()),
+                    (Route<dynamic> route) => false, // remove all previous routes
+              );
+            },
           ),
+
         ]),
       ),
       body: SafeArea(
