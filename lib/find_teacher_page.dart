@@ -62,7 +62,7 @@ class _FindTeacherPageState extends State<FindTeacherPage> {
     'dr.smith|cse|sem 3 - cse': TeacherLocationResult(
       teacherName: 'Dr. Smith',
       dept: 'CSE',
-      isTeaching: true,w
+      isTeaching: true,
       location: 'Room 402, Block A',
       status: 'Teaching: Compiler Design',
       timetable: {

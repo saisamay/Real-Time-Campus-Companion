@@ -2,8 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'find_teacher_page.dart';
 import 'main.dart';
+import 'find_teacher_page.dart';
 import 'find_classroom_page.dart';
 import 'timetable_page.dart';
 
@@ -67,8 +67,12 @@ class _HomePageState extends State<HomePage> {
               Navigator.pop(context); // close drawer
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const TeachersPage()),
+                MaterialPageRoute(
+                  builder: (_) => const FindTeacherPage(),
+                ),
               );
+
+
             },
           ),
 
