@@ -3,20 +3,22 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'find_teacher_page.dart';
-// import the new page
+import 'main.dart';
 import 'find_classroom_page.dart';
+import 'timetable_page.dart';
 
 class HomePage extends StatefulWidget {
   final String universityName;
 
-  const HomePage({super.key, required this.universityName});
+  const HomePage({super.key, required this.universityName, required userName});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<String> eventImages = [
+  // make this const since it's static
+  final List<String> eventImages = const [
     'https://picsum.photos/800/400?random=1',
     'https://picsum.photos/800/400?random=2',
     'https://picsum.photos/800/400?random=3',
@@ -46,11 +48,12 @@ class _HomePageState extends State<HomePage> {
       ),
       drawer: Drawer(
         child: ListView(padding: EdgeInsets.zero, children: [
-          const UserAccountsDrawerHeader(
-            decoration: BoxDecoration(color: Color(0xFFA4123F)),
-            currentAccountPicture: CircleAvatar(backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
-            accountName: Text("Student Name"),
-            accountEmail: Text("student@university.edu"),
+          // <-- removed const here because NetworkImage is non-const
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(color: Color(0xFFA4123F)),
+            currentAccountPicture: const CircleAvatar(backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
+            accountName: const Text("Student Name"),
+            accountEmail: const Text("student@university.edu"),
           ),
           ListTile(
             leading: const Icon(Icons.home),
@@ -86,8 +89,11 @@ class _HomePageState extends State<HomePage> {
             leading: const Icon(Icons.schedule),
             title: const Text("Timetable"),
             onTap: () {
-              Navigator.pop(context);
-              // TODO: navigate to own timetable page
+              Navigator.pop(context); // close the drawer first
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TimetablePage()),
+              );
             },
           ),
           ListTile(
@@ -100,12 +106,19 @@ class _HomePageState extends State<HomePage> {
             title: const Text("Settings"),
             onTap: () => Navigator.pop(context),
           ),
-          const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text("Logout"),
-            onTap: () => Navigator.pop(context),
+            onTap: () {
+              Navigator.pop(context); // close the drawer first
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginPage()),
+                    (Route<dynamic> route) => false, // remove all previous routes
+              );
+            },
           ),
+
         ]),
       ),
       body: SafeArea(
