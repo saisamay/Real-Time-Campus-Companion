@@ -1,8 +1,10 @@
 // lib/timetable_page.dart
 import 'package:flutter/material.dart';
+import 'api_service.dart';
+import 'timetable_model.dart';
 
 class TimetablePage extends StatefulWidget {
-  const TimetablePage({super.key});
+  const TimetablePage({super.key, required bool embedded});
 
   @override
   State<TimetablePage> createState() => _TimetablePageState();
@@ -31,7 +33,7 @@ class _TimetablePageState extends State<TimetablePage> {
     {'no': '9', 'time': '4:00 - 4:50'},
   ];
 
-  // Example timetable data: Map<day, List<cell>>
+  // fallback sample timetable (used if backend returns nothing)
   Map<String, List<Map<String, String>>> timetableData = {
     'Mon': [
       {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
@@ -71,7 +73,7 @@ class _TimetablePageState extends State<TimetablePage> {
       {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
       {'title': '23EEE381', 'subtitle': '23EEE382', 'color': '#FFF799'},
       {'title': 'Lunch Break', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
+      {'title': '', 'subtitle': '-', 'color': '#FFFFFFFF'},
       {'title': '23EEE351', 'subtitle': '23EEE369', 'color': '#8BD9FF'},
       {'title': 'CIR-23LSE301', 'subtitle': 'Soft Skills', 'color': '#F4DDB3'},
       {'title': 'CIR-23LSE301', 'subtitle': 'Code HR', 'color': '#F4DDB3'},
@@ -90,21 +92,112 @@ class _TimetablePageState extends State<TimetablePage> {
     ],
   };
 
+  // Live data
+  Timetable? _currentTimetable;
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMyTimetable();
+  }
+
+  // Helper to convert color hex string to Color
   Color hexToColor(String hex) {
     String cleaned = hex.replaceAll('#', '');
     if (cleaned.length == 6) cleaned = 'FF$cleaned';
     return Color(int.parse(cleaned, radix: 16));
   }
 
-  void _onSearch() {
-    // Replace with backend fetch if required.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Searching: $selectedSemester / $selectedBranch / $selectedSection')),
+  Future<void> _loadMyTimetable() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await ApiService.getMyTimetable();
+      // server may return {timetable: {...}} or timetable directly
+      final timJson = (res['timetable'] ?? res) as Map<String, dynamic>;
+      final tt = Timetable.fromJson(timJson);
+      setState(() {
+        _currentTimetable = tt;
+        // sync selections with user's section
+        if (tt.semester.isNotEmpty) selectedSemester = tt.semester;
+        if (tt.branch.isNotEmpty) selectedBranch = tt.branch;
+        if (tt.section.isNotEmpty) selectedSection = tt.section;
+      });
+    } catch (e) {
+      // keep fallback data but show error
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _onSearch() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await ApiService.searchTimetable(
+        semester: selectedSemester,
+        branch: selectedBranch,
+        section: selectedSection,
+      );
+      final timJson = (res['timetable'] ?? res) as Map<String, dynamic>;
+      final tt = Timetable.fromJson(timJson);
+      setState(() {
+        _currentTimetable = tt;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Search error: ${e.toString()}')));
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  void _showCellDetailsFromSlot(String day, int slotIndex, Slot slot) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Wrap(
+              children: [
+                ListTile(
+                  title: Text(slot.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(slot.subtitle),
+                ),
+                const Divider(),
+                ListTile(title: Text('Day: $day')),
+                ListTile(title: Text('Slot: ${slots[slotIndex]['no']}  •  ${slots[slotIndex]['time']}')),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
-    setState(() {});
   }
 
   void _showCellDetails(String day, int slotIndex, Map<String, String> cell) {
+    // backward-compat fallback (uses sample data structure)
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -123,10 +216,7 @@ class _TimetablePageState extends State<TimetablePage> {
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
-                  ),
+                  child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
                 ),
               ],
             ),
@@ -234,7 +324,33 @@ class _TimetablePageState extends State<TimetablePage> {
 
   // Build the whole timetable as a scrollable table-like widget
   Widget _buildTimetable() {
-    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    if (_loading) {
+      return const SizedBox(
+        height: 240,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return SizedBox(
+        height: 200,
+        child: Center(child: Text('Error: $_error')),
+      );
+    }
+
+    // if we have server timetable, use it; else fallback to local sample
+    final hasServer = _currentTimetable != null && _currentTimetable!.grid.isNotEmpty;
+    final days = hasServer
+        ? _currentTimetable!.grid.map((d) => d.dayName).toList()
+        : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+    // create mapping dayName -> List<Slot> (if server present)
+    final Map<String, List<Slot>> gridMap = {};
+    if (hasServer) {
+      for (final d in _currentTimetable!.grid) {
+        gridMap[d.dayName] = d.slots;
+      }
+    }
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -263,7 +379,11 @@ class _TimetablePageState extends State<TimetablePage> {
 
           // rows for each day
           ...days.map((day) {
-            final cells = timetableData[day]!;
+            // get cells either from server Slot objects or fallback sample map
+            final List<dynamic> cellsDynamic = hasServer
+                ? (gridMap[day] ?? List.generate(9, (_) => Slot(title: '', subtitle: '', color: '#FFFFFFFF')))
+                : (timetableData[day] ?? List.generate(9, (_) => {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'}));
+
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -277,51 +397,96 @@ class _TimetablePageState extends State<TimetablePage> {
                   child: Text(day, style: const TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 // cells
-                ...List.generate(cells.length, (index) {
-                  final cell = cells[index];
-                  final bg = hexToColor(cell['color'] ?? '#FFFFFFFF');
-                  final title = cell['title'] ?? '';
-                  final subtitle = cell['subtitle'] ?? '';
-                  return GestureDetector(
-                    onTap: () => _showCellDetails(day, index, cell),
-                    child: Container(
-                      width: 160,
-                      height: 100,
-                      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: bg,
-                        border: Border.all(color: Colors.black12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // title (bigger, fits ~10 big chars)
-                          Text(
-                            title,
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          // subtitle (20-30 chars, allow up to 3 lines)
-                          Expanded(
-                            child: Text(
-                              subtitle,
-                              style: const TextStyle(fontSize: 12),
-                              maxLines: 3,
+                ...List.generate(9, (index) {
+                  if (hasServer) {
+                    final Slot slot = cellsDynamic[index] as Slot;
+                    final bg = hexToColor(slot.color);
+                    return GestureDetector(
+                      onTap: () => _showCellDetailsFromSlot(day, index, slot),
+                      child: Container(
+                        width: 160,
+                        height: 100,
+                        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: bg,
+                          border: Border.all(color: Colors.black12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // title (bigger, fits ~10 big chars)
+                            Text(
+                              slot.title,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          Align(
-                            alignment: Alignment.bottomRight,
-                            child: Text('(${slots[index]['no']})', style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                          )
-                        ],
+                            const SizedBox(height: 6),
+                            // subtitle (20-30 chars, allow up to 3 lines)
+                            Expanded(
+                              child: Text(
+                                slot.subtitle,
+                                style: const TextStyle(fontSize: 12),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.bottomRight,
+                              child: Text('(${slots[index]['no']})', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                            )
+                          ],
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  } else {
+                    final cell = cellsDynamic[index] as Map<String, String>;
+                    final bg = hexToColor(cell['color'] ?? '#FFFFFFFF');
+                    final title = cell['title'] ?? '';
+                    final subtitle = cell['subtitle'] ?? '';
+                    return GestureDetector(
+                      onTap: () => _showCellDetails(day, index, cell),
+                      child: Container(
+                        width: 160,
+                        height: 100,
+                        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: bg,
+                          border: Border.all(color: Colors.black12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // title (bigger, fits ~10 big chars)
+                            Text(
+                              title,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 6),
+                            // subtitle (20-30 chars, allow up to 3 lines)
+                            Expanded(
+                              child: Text(
+                                subtitle,
+                                style: const TextStyle(fontSize: 12),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.bottomRight,
+                              child: Text('(${slots[index]['no']})', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                            )
+                          ],
+                        ),
+                      ),
+                    );
+                  }
                 })
               ],
             );
@@ -342,16 +507,21 @@ class _TimetablePageState extends State<TimetablePage> {
         children: [
           _buildControls(),
           const SizedBox(height: 6),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _buildTimetable(),
-                  const SizedBox(height: 24),
-                ],
+          if (_loading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(child: Center(child: Text('Error: $_error')))
+          else
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildTimetable(),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

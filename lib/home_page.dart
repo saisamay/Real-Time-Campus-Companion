@@ -1,201 +1,309 @@
 // lib/home_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
+
 import 'find_teacher_page.dart';
-import 'main.dart';
 import 'find_classroom_page.dart';
 import 'timetable_page.dart';
+import 'main.dart'; // for LoginPage navigation
+import 'profile_page.dart'; // NEW
+import 'emptyclassrooms_page.dart'; // NEW
 
 class HomePage extends StatefulWidget {
   final String universityName;
+  final bool isDark;
+  final ValueChanged<bool>? onToggleTheme;
+  final String? userName;
+  final String? userEmail;
 
-  const HomePage({super.key, required this.universityName, required userName});
+  const HomePage({
+    super.key,
+    required this.universityName,
+    this.isDark = false, // default
+    this.onToggleTheme, // optional
+    this.userName,
+    this.userEmail,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  // make this const since it's static
+  int _index = 0;
+  late PageController _pageController;
+
+  // User state (can be populated from AuthService later)
+  String userName = 'Student Name';
+  String userEmail = 'student@university.edu';
+
+  // For quick demo preview (timetable preview)
+  String selectedDept = 'EEE';
+  String selectedSection = 'N302';
+
+  // Images and sample data (kept from your design)
   final List<String> eventImages = const [
-    'https://picsum.photos/800/400?random=1',
-    'https://picsum.photos/800/400?random=2',
-    'https://picsum.photos/800/400?random=3',
+    'https://picsum.photos/1200/600?random=1',
+    'https://picsum.photos/1200/600?random=2',
+    'https://picsum.photos/1200/600?random=3',
   ];
-  int _currentIndex = 0;
+
+  final Map<String, Map<String, List<String>>> timetableData = {
+    'EEE': {
+      'N302': [
+        'https://picsum.photos/800/400?random=11',
+        'https://picsum.photos/800/400?random=12',
+      ],
+    },
+    'CSE': {
+      'A': ['https://picsum.photos/800/400?random=21'],
+    },
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _index);
+
+    // If widget passed user info, set local values
+    if (widget.userName != null) userName = widget.userName!;
+    if (widget.userEmail != null) userEmail = widget.userEmail!;
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _goToPage(int index) {
+    setState(() => _index = index);
+    _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
+
+  // Allow ProfilePage to update name/email
+  void _updateUserName(String name) => setState(() => userName = name);
+  void _updateUserEmail(String email) => setState(() => userEmail = email);
+
+  // ---------- HOME PAGE CONTENT ----------
+  Widget _homePage(BuildContext context) {
+    final imagesForPreview = timetableData[selectedDept]?[selectedSection] ?? <String>[];
+    final previewImage = imagesForPreview.isNotEmpty ? imagesForPreview.first : null;
+    final scheme = Theme.of(context).colorScheme;
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        const SizedBox(height: 16),
+        // Events carousel
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: CarouselSlider(
+              options: CarouselOptions(
+                height: 200,
+                autoPlay: true,
+                enlargeCenterPage: true,
+                viewportFraction: 0.95,
+                autoPlayInterval: const Duration(seconds: 3),
+              ),
+              items: eventImages.map((url) {
+                return Image.network(url, fit: BoxFit.cover, width: double.infinity);
+              }).toList(),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Timetable preview card
+        if (previewImage != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Card(
+              elevation: 3,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 220, width: double.infinity, child: Image.network(previewImage, fit: BoxFit.cover)),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: scheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '$selectedDept - $selectedSection',
+                            style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onPrimaryContainer),
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: () => _goToPage(1),
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('View Timetable'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        const SizedBox(height: 20),
+
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text("Announcements", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        ),
+        const ListTile(
+          leading: Icon(Icons.campaign),
+          title: Text("Tech Fest this weekend!"),
+          subtitle: Text("Don't miss the cultural night."),
+        ),
+        const ListTile(
+          leading: Icon(Icons.book),
+          title: Text("Library open till 10 PM"),
+          subtitle: Text("Extended hours for exams."),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ---------- EVENTS ----------
+  Widget _eventsPage(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        CarouselSlider(
+          options: CarouselOptions(
+            height: 220.0,
+            autoPlay: true,
+            enlargeCenterPage: true,
+            viewportFraction: 0.9,
+            autoPlayInterval: const Duration(seconds: 3),
+          ),
+          items: eventImages
+              .map((url) => ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(url, fit: BoxFit.cover, width: double.infinity)))
+              .toList(),
+        ),
+        const SizedBox(height: 20),
+        const Text("Upcoming Events", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text("Join our Annual Tech Fest and Cultural Week starting this Friday!", textAlign: TextAlign.center),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.universityName, style: const TextStyle(fontWeight: FontWeight.bold)),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-            tooltip: 'Open navigation drawer',
-          ),
-        ),
+        title: Text(widget.universityName),
+        leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
         actions: [
-          IconButton(
-            icon: const CircleAvatar(radius: 14, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profile clicked"))),
-            tooltip: 'Profile',
-          ),
-          const SizedBox(width: 10),
+          IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(context)),
+          const SizedBox(width: 8),
         ],
       ),
+
       drawer: Drawer(
         child: ListView(padding: EdgeInsets.zero, children: [
-          // <-- removed const here because NetworkImage is non-const
           UserAccountsDrawerHeader(
             decoration: const BoxDecoration(color: Color(0xFFA4123F)),
             currentAccountPicture: const CircleAvatar(backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
-            accountName: const Text("Student Name"),
-            accountEmail: const Text("student@university.edu"),
+            accountName: Text(userName),
+            accountEmail: Text(userEmail),
           ),
-          ListTile(
-            leading: const Icon(Icons.home),
-            title: const Text("Home"),
-            onTap: () => Navigator.pop(context),
-          ),
-          ListTile(
-            leading: const Icon(Icons.person_search),
-            title: const Text('Find Teacher (Cabin/Room)'),
-            onTap: () {
-              Navigator.pop(context); // close drawer
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const FindTeacherPage()),
-              );
-            },
-          ),
-
-          // NEW: Find Friend Class Room item
-          ListTile(
-            leading: const Icon(Icons.search),
-            title: const Text("Find Friend Class Room"),
-            onTap: () {
-              Navigator.pop(context); // close drawer
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const FindClassRoomPage()),
-              );
-            },
-          ),
-
-          ListTile(
-            leading: const Icon(Icons.schedule),
-            title: const Text("Timetable"),
-            onTap: () {
-              Navigator.pop(context); // close the drawer first
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TimetablePage()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.event),
-            title: const Text("Events"),
-            onTap: () => Navigator.pop(context),
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text("Settings"),
-            onTap: () => Navigator.pop(context),
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text("Logout"),
-            onTap: () {
-              Navigator.pop(context); // close the drawer first
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-                    (Route<dynamic> route) => false, // remove all previous routes
-              );
-            },
-          ),
-
-        ]),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(children: [
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: CarouselSlider.builder(
-                  itemCount: eventImages.length,
-                  itemBuilder: (context, itemIndex, realIndex) {
-                    final url = eventImages[itemIndex];
-                    return AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Image.network(
-                        url,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(child: CircularProgressIndicator());
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.grey.shade200,
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.broken_image, size: 48),
-                          );
-                        },
-                        semanticLabel: 'Event image ${itemIndex + 1}',
-                      ),
-                    );
-                  },
-                  options: CarouselOptions(
-                    height: 200,
-                    autoPlay: true,
-                    enlargeCenterPage: true,
-                    viewportFraction: 0.95,
-                    autoPlayInterval: const Duration(seconds: 3),
-                    onPageChanged: (index, reason) => setState(() => _currentIndex = index),
-                  ),
+          ListTile(leading: const Icon(Icons.home), title: const Text("Home"), onTap: () {
+            Navigator.pop(context);
+            _goToPage(0);
+          }),
+          ListTile(leading: const Icon(Icons.person_search), title: const Text('Find Teacher (Cabin/Room)'), onTap: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const FindTeacherPage()));
+          }),
+          ListTile(leading: const Icon(Icons.search), title: const Text("Find Friend Class Room"), onTap: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const FindClassRoomPage()));
+          }),
+          ListTile(leading: const Icon(Icons.schedule), title: const Text("Timetable"), onTap: () {
+            Navigator.pop(context);
+            _goToPage(1);
+          }),
+          ListTile(leading: const Icon(Icons.event), title: const Text("Events"), onTap: () {
+            Navigator.pop(context);
+            _goToPage(2);
+          }),
+          ListTile(leading: const Icon(Icons.settings), title: const Text("Settings"), onTap: () => Navigator.pop(context)),
+          ListTile(leading: const Icon(Icons.logout), title: const Text("Logout"), onTap: () {
+            Navigator.pop(context);
+            // navigate to LoginPage (keeps your prior pattern)
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LoginPage(
+                  isDark: widget.isDark,
+                  onToggleTheme: widget.onToggleTheme ?? (bool v) {},
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: eventImages.asMap().entries.map((entry) {
-              final idx = entry.key;
-              return Container(
-                width: _currentIndex == idx ? 12.0 : 8.0,
-                height: _currentIndex == idx ? 12.0 : 8.0,
-                margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _currentIndex == idx ? Theme.of(context).colorScheme.primary : Colors.grey,
-                ),
-              );
-            }).toList()),
-            const SizedBox(height: 20),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: Align(alignment: Alignment.centerLeft, child: Text("Upcoming Events", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Column(children: [
-                Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: ListTile(leading: const Icon(Icons.mic), title: const Text('Guest Lecture: Flutter & Beyond'), subtitle: const Text('Nov 10 • 4:00 PM • Auditorium'), onTap: () {})),
-                const SizedBox(height: 8),
-                Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: ListTile(leading: const Icon(Icons.sports_score), title: const Text('Inter-University Sports Meet'), subtitle: const Text('Nov 14 • 9:00 AM • Sports Complex'), onTap: () {})),
-              ]),
-            ),
-            const SizedBox(height: 24),
-          ]),
-        ),
+                  (Route<dynamic> route) => false,
+            );
+          }),
+        ]),
       ),
+
+      body: PageView(controller: _pageController, onPageChanged: (i) => setState(() => _index = i), children: [
+        _homePage(context), // 0
+        const TimetablePage(embedded: true), // 1
+        _eventsPage(context), // 2
+        const EmptyClassroomsPage(), // 3 -> external file
+        ProfilePage(
+          userName: userName,
+          userEmail: userEmail,
+          dept: selectedDept,
+          section: selectedSection,
+          isDark: widget.isDark,
+          onToggleTheme: widget.onToggleTheme,
+          onUpdateName: _updateUserName,
+          onUpdateEmail: _updateUserEmail,
+        ), // 4
+      ]),
+
+      bottomNavigationBar: NavigationBar(selectedIndex: _index, onDestinationSelected: _goToPage, destinations: const [
+        NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+        NavigationDestination(icon: Icon(Icons.schedule), label: 'Timetable'),
+        NavigationDestination(icon: Icon(Icons.event), label: 'Events'),
+        NavigationDestination(icon: Icon(Icons.meeting_room), label: 'Classrooms'),
+        NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+      ]),
     );
+  }
+
+  void _openQuickSearch(BuildContext ctx) {
+    showModalBottomSheet(context: ctx, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))), builder: (bCtx) {
+      return Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(bCtx).viewInsets.bottom + 16),
+        child: TextField(
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Search anything…', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
+          onSubmitted: (q) {
+            Navigator.pop(bCtx);
+            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Searching for: $q')));
+          },
+        ),
+      );
+    });
   }
 }
