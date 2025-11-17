@@ -1,5 +1,7 @@
 // lib/profile_page.dart
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class ProfilePage extends StatefulWidget {
   final String userName;
@@ -68,6 +70,98 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _changePassword() async {
+    final currentCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Change Password'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: currentCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Current password'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: newCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'New password'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: confirmCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Confirm new password'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    final current = currentCtrl.text.trim();
+    final nw = newCtrl.text.trim();
+    final confirm = confirmCtrl.text.trim();
+
+    if (nw.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password must be at least 8 characters')));
+      return;
+    }
+    if (nw != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New passwords do not match')));
+      return;
+    }
+
+    // Show loading UI if you want
+    final uri = Uri.parse('http://localhost:4000/api/user/change-password');
+    try {
+      // If you use token-based auth, include Authorization header
+      final token = ''; // fetch JWT from secure storage if using auth
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'currentPassword': current,
+          'newPassword': nw,
+        }),
+      );
+
+      if (resp.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password changed successfully. Please re-login.')));
+        // optional: force logout / navigate to login
+        // Navigator.pushReplacement(... LoginPage ...);
+      } else {
+        final body = jsonDecode(resp.body);
+        final msg = body['error'] ?? body['message'] ?? 'Failed to change password';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
   Future<void> _editEmail() async {
     final ctrl = TextEditingController(text: _email);
     final ok = await showDialog<bool>(
@@ -246,6 +340,7 @@ class _ProfilePageState extends State<ProfilePage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Wrap(spacing: 12, runSpacing: 12, children: [
+            _actionTile(context, icon: Icons.lock, label: 'Change Password', onTap: _changePassword),
             _actionTile(context, icon: Icons.edit, label: 'Edit Name', onTap: _editName),
             _actionTile(context, icon: Icons.email, label: 'Edit Email', onTap: _editEmail),
             _themeTile(context),

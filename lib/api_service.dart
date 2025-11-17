@@ -3,9 +3,13 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-final _storage = FlutterSecureStorage();
+final _storage = const FlutterSecureStorage();
 const _tokenKey = 'auth_token';
 const _userKey = 'user_profile';
+const _userBranchKey = 'user_branch';
+const _userSectionKey = 'user_section';
+const _userSemesterKey = 'user_semester';
+const _userRoleKey = 'user_role';
 
 class ApiService {
   static const String baseUrl = 'http://10.0.2.2:4000'; // set per environment
@@ -13,20 +17,49 @@ class ApiService {
   // Save token securely
   static Future<void> saveToken(String token) async => await _storage.write(key: _tokenKey, value: token);
   static Future<String?> readToken() async => await _storage.read(key: _tokenKey);
-  static Future<void> deleteToken() async => await _storage.delete(key: _tokenKey);
+  static Future<void> deleteToken() async {
+    await _storage.delete(key: _tokenKey);
+  }
 
-  // Save / read user profile as JSON string
+  // Save / read user profile as JSON string (and also save fields individually)
   static Future<void> saveUserProfile(Map<String, dynamic> user) async {
     await _storage.write(key: _userKey, value: jsonEncode(user));
+
+    // save common fields individually for ease of access
+    final branch = user['branch']?.toString();
+    final section = user['section']?.toString();
+    final semester = user['semester']?.toString();
+    final role = user['role']?.toString();
+
+    if (branch != null) await _storage.write(key: _userBranchKey, value: branch);
+    if (section != null) await _storage.write(key: _userSectionKey, value: section);
+    if (semester != null) await _storage.write(key: _userSemesterKey, value: semester);
+    if (role != null) await _storage.write(key: _userRoleKey, value: role);
   }
+
   static Future<Map<String, dynamic>?> readUserProfile() async {
     final s = await _storage.read(key: _userKey);
     if (s == null) return null;
-    return jsonDecode(s) as Map<String, dynamic>;
+    try {
+      return jsonDecode(s) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
+
   static Future<void> deleteUserProfile() async {
     await _storage.delete(key: _userKey);
+    await _storage.delete(key: _userBranchKey);
+    await _storage.delete(key: _userSectionKey);
+    await _storage.delete(key: _userSemesterKey);
+    await _storage.delete(key: _userRoleKey);
   }
+
+  // Convenience getters for separate fields
+  static Future<String?> readBranch() async => await _storage.read(key: _userBranchKey);
+  static Future<String?> readSection() async => await _storage.read(key: _userSectionKey);
+  static Future<String?> readSemester() async => await _storage.read(key: _userSemesterKey);
+  static Future<String?> readRole() async => await _storage.read(key: _userRoleKey);
 
   static Future<Map<String, String>> _headers({bool auth = false}) async {
     final headers = {'Content-Type': 'application/json'};
@@ -49,13 +82,12 @@ class ApiService {
       if (body['user'] != null) await saveUserProfile(body['user'] as Map<String, dynamic>);
       return body;
     } else {
+      // keep original behavior: throw so callers handle
       throw Exception(body['error'] ?? 'Login failed (${res.statusCode})');
     }
   }
 
-// ... other methods (getMyTimetable, searchTimetable) remain unchanged
-
-// Get timetable for logged-in user
+  // Get timetable for logged-in user
   static Future<Map<String, dynamic>> getMyTimetable() async {
     final url = Uri.parse('$baseUrl/api/timetable/me');
     final res = await http.get(url, headers: await _headers(auth: true));

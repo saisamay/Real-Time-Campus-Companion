@@ -15,6 +15,9 @@ class HomePage extends StatefulWidget {
   final ValueChanged<bool>? onToggleTheme;
   final String? userName;
   final String? userEmail;
+  final String? branch;
+  final String? section;
+  final String? semester;
 
   const HomePage({
     super.key,
@@ -23,6 +26,9 @@ class HomePage extends StatefulWidget {
     this.onToggleTheme, // optional
     this.userName,
     this.userEmail,
+    this.branch,
+    this.section,
+    this.semester,
   });
 
   @override
@@ -33,13 +39,14 @@ class _HomePageState extends State<HomePage> {
   int _index = 0;
   late PageController _pageController;
 
-  // User state (can be populated from AuthService later)
-  String userName = 'Student Name';
-  String userEmail = 'student@university.edu';
+  // single set of selected values (initialized in initState)
+  late String selectedDept;
+  late String selectedSection;
+  late String selectedSemester;
 
-  // For quick demo preview (timetable preview)
-  String selectedDept = 'EEE';
-  String selectedSection = 'N302';
+  // User state (can be populated from AuthService later)
+  late String userName;
+  late String userEmail;
 
   // Images and sample data (kept from your design)
   final List<String> eventImages = const [
@@ -65,9 +72,13 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _pageController = PageController(initialPage: _index);
 
-    // If widget passed user info, set local values
-    if (widget.userName != null) userName = widget.userName!;
-    if (widget.userEmail != null) userEmail = widget.userEmail!;
+    // initialize from widget, with sensible defaults
+    selectedDept = (widget.branch ?? 'EEE').toUpperCase();
+    selectedSection = (widget.section ?? 'A').toUpperCase();
+    selectedSemester = (widget.semester ?? 'S5').toUpperCase();
+
+    userName = widget.userName ?? 'Student Name';
+    userEmail = widget.userEmail ?? 'student@university.edu';
   }
 
   @override
