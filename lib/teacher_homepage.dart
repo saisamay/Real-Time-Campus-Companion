@@ -1,50 +1,34 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MyApp());
-}
 
-// ----------------------- APP -----------------------
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class TeacherHomePage extends StatelessWidget {
+  final String universityName;
+  final String userName;
+  final String userEmail;
+  final bool isDark;
+  final ValueChanged<bool> onToggleTheme;
 
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  bool _isDark = false;
-
-  void _toggleTheme(bool value) => setState(() => _isDark = value);
+  const TeacherHomePage({
+    super.key,
+    required this.universityName,
+    required this.userName,
+    required this.userEmail,
+    required this.isDark,
+    required this.onToggleTheme,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final light = ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), brightness: Brightness.light),
-      useMaterial3: true,
-      appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
-      navigationBarTheme: const NavigationBarThemeData(height: 70, elevation: 2),
-    );
-
-    final dark = ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), brightness: Brightness.dark),
-      useMaterial3: true,
-      appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
-      navigationBarTheme: const NavigationBarThemeData(height: 70, elevation: 2),
-    );
-
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'University (Teachers)',
-      theme: light,
-      darkTheme: dark,
-      themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
-      home: TeachersHome(universityName: 'Your University', isDark: _isDark, onToggleTheme: _toggleTheme),
+    // The actual UI is implemented in TeachersHome (stateful).
+    return TeachersHome(
+      universityName: universityName,
+      isDark: isDark,
+      onToggleTheme: onToggleTheme,
     );
   }
 }
 
-// ----------------------- TEACHERS HOME -----------------------
+// ----------------------- TEACHERS HOME (stateful) -----------------------
 class TeachersHome extends StatefulWidget {
   final String universityName;
   final bool isDark;
@@ -702,9 +686,7 @@ class NextClassCard extends StatelessWidget {
     for (int d = 0; d < 7; d++) {
       final di = (todayIndex + d) % weekdays.length;
       final day = weekdays[di];
-      final cells = timetable[day] ?? [
-
-      ];
+      final cells = timetable[day] ?? [];
       final startSlot = d == 0 ? slotStart : 0;
       for (int s = startSlot; s < cells.length; s++) {
         final c = cells[s];
@@ -727,7 +709,6 @@ class NextClassCard extends StatelessWidget {
         const SizedBox(height: 4),
         if (next != null) Text('${next['sub']} • ${next['room']} • ${next['day']}') else const Text('No upcoming classes found'),
       ])),
-      // no Details button and slot not shown
     ])));
   }
 }

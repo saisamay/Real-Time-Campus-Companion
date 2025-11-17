@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'home_page.dart';
 import 'auth_service.dart';
+import 'teacher_homepage.dart';  // ✅ IMPORTED TEACHER HOMEPAGE
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,22 +110,22 @@ class _LoginPageState extends State<LoginPage> {
       Positioned(
         top: -50,
         left: -50,
-        child: _FloatingOrb(size: 200, color: const Color(0xFFD4AF37).withOpacity(0.1)),
+        child: _FloatingOrb(size: 200, color: const Color(0xFFD4AF37).withValues(alpha: 0.1)),
       ),
       Positioned(
         top: 100,
         right: -30,
-        child: _FloatingOrb(size: 150, color: const Color(0xFFA4123F).withOpacity(0.2)),
+        child: _FloatingOrb(size: 150, color: const Color(0xFFA4123F).withValues(alpha: 0.2)),
       ),
       Positioned(
         bottom: -80,
         right: 50,
-        child: _FloatingOrb(size: 250, color: const Color(0xFFD4AF37).withOpacity(0.15)),
+        child: _FloatingOrb(size: 250, color: const Color(0xFFD4AF37).withValues(alpha: 0.15)),
       ),
       Positioned(
         bottom: 100,
         left: -40,
-        child: _FloatingOrb(size: 180, color: Colors.white.withOpacity(0.05)),
+        child: _FloatingOrb(size: 180, color: Colors.white.withValues(alpha: 0.05)),
       ),
     ];
   }
@@ -140,98 +141,85 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final res = await _auth.login(email, password);
       if (res['ok'] == true) {
-        final user = res['user'] as Map<String, dynamic>?;
+        final user = res['user'] as Map<String, dynamic>? ?? {};
 
-        // Determine role (case-insensitive)
-        String role = (user?['role'] as String? ?? '').toLowerCase();
-        if (role.isEmpty) {
-          // fallback to boolean fields if backend returns those
-          if (user?['isCR'] == true || user?['is_cr'] == true) {
-            role = 'cr';
-          } else if (user?['isAdmin'] == true || user?['is_admin'] == true || (user?['role'] as String? ?? '').toLowerCase() == 'admin') {
-            role = 'admin';
-          } else {
-            role = 'student';
-          }
-        }
+        // Get user role and normalize it (lowercase, trim whitespace)
+        final rawRole = (user['role'] as String?)?.trim().toLowerCase() ?? '';
+        final role = rawRole.isEmpty ? 'student' : rawRole;
 
-        // Common params to pass
-        final userName = user?['name'] ?? user?['email'] ?? 'Student Name';
-        final userEmail = user?['email'] ?? '';
+        // Common user info
+        final userName = user['name'] ?? user['email'] ?? 'User';
+        final userEmail = user['email'] ?? '';
+        final branch = user['branch'];
+        final section = user['section'];
+        final semester = user['semester'];
 
-        // Route based on role
-        if (role == 'student') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => HomePage(
-                universityName: "Amrita Vishwa Vidyapeetham",
-                userName: userName,
-                userEmail: userEmail,
-                isDark: widget.isDark,
-                onToggleTheme: widget.onToggleTheme,
-                branch: user?['branch'],
-                section: user?['section'],
-                semester: user?['semester'],
-              ),
-            ),
-          );
-        } else if (role == 'cr' || role == 'classrep' || role == 'class_rep') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CrHomePage(
-                universityName: "Amrita Vishwa Vidyapeetham — CR",
-                userName: userName,
-                userEmail: userEmail,
-                isDark: widget.isDark,
-                onToggleTheme: widget.onToggleTheme,
-                branch: user?['branch'],
-                section: user?['section'],
-                semester: user?['semester'],
-              ),
-            ),
-          );
-        } else if (role == 'admin' || role == 'faculty' || role == 'staff') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AdminHomePage(
-                universityName: "Amrita Vishwa Vidyapeetham — Admin",
-                userName: userName,
-                userEmail: userEmail,
-                isDark: widget.isDark,
-                onToggleTheme: widget.onToggleTheme,
-              ),
-            ),
+        // 🎯 ROUTING LOGIC - Navigate based on user role
+        Widget targetPage;
+
+        if (role == 'teacher') {
+          // ✅ TEACHER → teacher_homepage.dart
+          targetPage = TeacherHomePage(
+            universityName: "Amrita Vishwa Vidyapeetham — Teacher",
+            userName: userName,
+            userEmail: userEmail,
+            isDark: widget.isDark,
+            onToggleTheme: widget.onToggleTheme,
           );
         } else {
-          // default fallback
+          // All other roles → home_page.dart (for now)
+          targetPage = HomePage(
+            universityName: _getUniversityNameForRole(role),
+            userName: userName,
+            userEmail: userEmail,
+            isDark: widget.isDark,
+            onToggleTheme: widget.onToggleTheme,
+            branch: branch,
+            section: section,
+            semester: semester,
+          );
+        }
+
+        // Navigate to the appropriate page
+        if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (_) => HomePage(
-                universityName: "Amrita Vishwa Vidyapeetham",
-                userName: userName,
-                userEmail: userEmail,
-                isDark: widget.isDark,
-                onToggleTheme: widget.onToggleTheme,
-              ),
-            ),
+            MaterialPageRoute(builder: (_) => targetPage),
           );
         }
       } else {
+        // Login failed
         final err = res['error'] ?? 'Login failed';
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.toString())));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err.toString())),
+          );
         }
       }
     } catch (e) {
+      // Error occurred
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _getUniversityNameForRole(String role) {
+    switch (role) {
+      case 'admin':
+        return "Amrita Vishwa Vidyapeetham — Admin";
+      case 'classrep':
+      case 'class_rep':
+      case 'cr':
+        return "Amrita Vishwa Vidyapeetham — CR";
+      case 'staff':
+        return "Amrita Vishwa Vidyapeetham — Staff";
+      default:
+        return "Amrita Vishwa Vidyapeetham";
     }
   }
 
@@ -250,7 +238,7 @@ class _LoginPageState extends State<LoginPage> {
               const Color(0xFF1a0a14),
               maroonColor,
               const Color(0xFF5a1035),
-              maroonColor.withOpacity(0.8),
+              maroonColor.withValues(alpha: 0.8),
               const Color(0xFF2d0a1f),
             ],
             stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
@@ -270,27 +258,26 @@ class _LoginPageState extends State<LoginPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // College Logo (safe fallback if asset is missing)
+                        // College Logo
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: LinearGradient(
                               colors: [
-                                Colors.white.withOpacity(0.2),
-                                Colors.white.withOpacity(0.1),
+                                Colors.white.withValues(alpha: 0.2),
+                                Colors.white.withValues(alpha: 0.1),
                               ],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: goldColor.withOpacity(0.3),
+                                color: goldColor.withValues(alpha: 0.3),
                                 blurRadius: 30,
                                 spreadRadius: 5,
                               ),
                             ],
                           ),
                           child: Image.asset(
-                            // Use the file referenced in your pubspec yaml (change if needed)
                             'assets/images/Untitled design.png',
                             width: 100,
                             height: 100,
@@ -314,7 +301,7 @@ class _LoginPageState extends State<LoginPage> {
                             color: Colors.white,
                             shadows: [
                               Shadow(
-                                color: maroonColor.withOpacity(0.5),
+                                color: maroonColor.withValues(alpha: 0.5),
                                 blurRadius: 10,
                               ),
                             ],
@@ -327,7 +314,7 @@ class _LoginPageState extends State<LoginPage> {
                           "Sign in to continue",
                           style: TextStyle(
                             fontSize: 16,
-                            color: Colors.white.withOpacity(0.8),
+                            color: Colors.white.withValues(alpha: 0.8),
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -343,17 +330,17 @@ class _LoginPageState extends State<LoginPage> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                Colors.white.withOpacity(0.15),
-                                Colors.white.withOpacity(0.05),
+                                Colors.white.withValues(alpha: 0.15),
+                                Colors.white.withValues(alpha: 0.05),
                               ],
                             ),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               width: 1.5,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 30,
                                 spreadRadius: -5,
                               ),
@@ -376,10 +363,10 @@ class _LoginPageState extends State<LoginPage> {
                                         style: const TextStyle(color: Colors.white),
                                         decoration: InputDecoration(
                                           labelText: "Email",
-                                          labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                                          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
                                           prefixIcon: Icon(Icons.email_outlined, color: goldColor),
                                           filled: true,
-                                          fillColor: Colors.white.withOpacity(0.1),
+                                          fillColor: Colors.white.withValues(alpha: 0.1),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(15),
                                             borderSide: BorderSide.none,
@@ -387,7 +374,7 @@ class _LoginPageState extends State<LoginPage> {
                                           enabledBorder: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(15),
                                             borderSide: BorderSide(
-                                              color: Colors.white.withOpacity(0.2),
+                                              color: Colors.white.withValues(alpha: 0.2),
                                               width: 1,
                                             ),
                                           ),
@@ -411,10 +398,10 @@ class _LoginPageState extends State<LoginPage> {
                                         style: const TextStyle(color: Colors.white),
                                         decoration: InputDecoration(
                                           labelText: "Password",
-                                          labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                                          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
                                           prefixIcon: Icon(Icons.lock_outline, color: goldColor),
                                           filled: true,
-                                          fillColor: Colors.white.withOpacity(0.1),
+                                          fillColor: Colors.white.withValues(alpha: 0.1),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(15),
                                             borderSide: BorderSide.none,
@@ -422,7 +409,7 @@ class _LoginPageState extends State<LoginPage> {
                                           enabledBorder: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(15),
                                             borderSide: BorderSide(
-                                              color: Colors.white.withOpacity(0.2),
+                                              color: Colors.white.withValues(alpha: 0.2),
                                               width: 1,
                                             ),
                                           ),
@@ -449,7 +436,7 @@ class _LoginPageState extends State<LoginPage> {
                                             backgroundColor: maroonColor,
                                             foregroundColor: Colors.white,
                                             elevation: 8,
-                                            shadowColor: maroonColor.withOpacity(0.5),
+                                            shadowColor: maroonColor.withValues(alpha: 0.5),
                                             shape: RoundedRectangleBorder(
                                               borderRadius: BorderRadius.circular(15),
                                             ),
@@ -540,89 +527,13 @@ class _FloatingOrbState extends State<_FloatingOrb> with SingleTickerProviderSta
               gradient: RadialGradient(
                 colors: [
                   widget.color,
-                  widget.color.withOpacity(0),
+                  widget.color.withValues(alpha: 0),
                 ],
               ),
             ),
           ),
         );
       },
-    );
-  }
-}
-
-/// Small wrapper page for CR. Replace contents with your CR-specific UI later.
-class CrHomePage extends StatelessWidget {
-  final String universityName;
-  final String userName;
-  final String userEmail;
-  final bool isDark;
-  final ValueChanged<bool> onToggleTheme;
-  final String? branch;
-  final String? section;
-  final String? semester;
-
-  const CrHomePage({
-    super.key,
-    required this.universityName,
-    required this.userName,
-    required this.userEmail,
-    required this.isDark,
-    required this.onToggleTheme,
-    this.branch,
-    this.section,
-    this.semester,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return HomePage(
-      universityName: universityName,
-      userName: userName,
-      userEmail: userEmail,
-      isDark: isDark,
-      onToggleTheme: onToggleTheme,
-      branch: branch,
-      section: section,
-      semester: semester,
-    );
-  }
-}
-
-/// Small wrapper page for Admin. Replace contents with your Admin-specific UI later.
-class AdminHomePage extends StatelessWidget {
-  final String universityName;
-  final String userName;
-  final String userEmail;
-  final bool isDark;
-  final ValueChanged<bool> onToggleTheme;
-  final String? branch;
-  final String? section;
-  final String? semester;
-
-  const AdminHomePage({
-    super.key,
-    required this.universityName,
-    required this.userName,
-    required this.userEmail,
-    required this.isDark,
-    required this.onToggleTheme,
-    this.branch,
-    this.section,
-    this.semester,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return HomePage(
-      universityName: universityName,
-      userName: userName,
-      userEmail: userEmail,
-      isDark: isDark,
-      onToggleTheme: onToggleTheme,
-      branch: branch,
-      section: section,
-      semester: semester,
     );
   }
 }
