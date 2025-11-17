@@ -6,6 +6,7 @@ import 'home_page.dart';
 import 'auth_service.dart';
 import 'teacher_homepage.dart';
 import 'admin_homepage.dart';
+import 'student_homepage.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const RootApp());
@@ -154,7 +155,6 @@ class _LoginPageState extends State<LoginPage> {
         final section = user['section'];
         final semester = user['semester'];
 
-        // 🎯 ROUTING LOGIC - Navigate based on user role
         Widget targetPage;
 
         if (role == 'teacher') {
@@ -178,9 +178,21 @@ class _LoginPageState extends State<LoginPage> {
             onToggleTheme: widget.onToggleTheme,
           );
         }
+        else if (role == 'classrep') {
+          targetPage = HomePage(
+            universityName: _getUniversityNameForRole(role),
+            userName: userName,
+            userEmail: userEmail,
+            isDark: widget.isDark,
+            onToggleTheme: widget.onToggleTheme,
+            branch: branch,
+            section: section,
+            semester: semester,
+          );
+        }
         else {
           // All other roles → home_page.dart (for now)
-          targetPage = HomePage(
+          targetPage = StudentHomePage(
             universityName: _getUniversityNameForRole(role),
             userName: userName,
             userEmail: userEmail,
