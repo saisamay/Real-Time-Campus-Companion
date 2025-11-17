@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'auth_service.dart';
 
+const maroonColor = Color(0xFFA4123F);
+
 void main() {
   runApp(const MyApp());
 }
@@ -76,8 +78,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    const maroonColor = Color(0xFFA4123F);
-
     return Scaffold(
       backgroundColor: maroonColor,
       body: Center(
