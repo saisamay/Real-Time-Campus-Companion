@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'home_page.dart';
 import 'auth_service.dart';
-import 'teacher_homepage.dart';  // ✅ IMPORTED TEACHER HOMEPAGE
-
+import 'teacher_homepage.dart';
+import 'admin_homepage.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const RootApp());
@@ -166,7 +166,19 @@ class _LoginPageState extends State<LoginPage> {
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
-        } else {
+
+        }
+
+        else if (role == 'admin') {
+          targetPage = AdminHomePage(
+            universityName: "Amrita Vishwa Vidyapeetham — Admin",
+            userName: userName,
+            userEmail: userEmail,
+            isDark: widget.isDark,
+            onToggleTheme: widget.onToggleTheme,
+          );
+        }
+        else {
           // All other roles → home_page.dart (for now)
           targetPage = HomePage(
             universityName: _getUniversityNameForRole(role),
