@@ -6,6 +6,7 @@ import 'home_page.dart';
 import 'auth_service.dart';
 import 'teacher_homepage.dart';
 import 'admin_homepage.dart';
+import 'staff_homepage.dart';
 import 'student_homepage.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -167,8 +168,15 @@ class _LoginPageState extends State<LoginPage> {
             onToggleTheme: widget.onToggleTheme,
           );
 
+        }else if (role == 'staff') {
+          targetPage = StaffHomePage(
+            universityName: "Amrita Vishwa Vidyapeetham — Staff",
+            userName: userName,
+            userEmail: userEmail,
+            isDark: widget.isDark,
+            onToggleTheme: widget.onToggleTheme,
+          );
         }
-
         else if (role == 'admin') {
           targetPage = AdminHomePage(
             universityName: "Amrita Vishwa Vidyapeetham — Admin",

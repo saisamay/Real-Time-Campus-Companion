@@ -1,5 +1,6 @@
+// lib/teacher_homepage.dart
 import 'package:flutter/material.dart';
-
+import 'main.dart'; // for LoginPage navigation
 
 class TeacherHomePage extends StatelessWidget {
   final String universityName;
@@ -24,6 +25,8 @@ class TeacherHomePage extends StatelessWidget {
       universityName: universityName,
       isDark: isDark,
       onToggleTheme: onToggleTheme,
+      userName: userName,
+      userEmail: userEmail,
     );
   }
 }
@@ -33,7 +36,17 @@ class TeachersHome extends StatefulWidget {
   final String universityName;
   final bool isDark;
   final ValueChanged<bool> onToggleTheme;
-  const TeachersHome({super.key, required this.universityName, required this.isDark, required this.onToggleTheme});
+  final String userName;
+  final String userEmail;
+
+  const TeachersHome({
+    super.key,
+    required this.universityName,
+    required this.isDark,
+    required this.onToggleTheme,
+    required this.userName,
+    required this.userEmail,
+  });
 
   @override
   State<TeachersHome> createState() => _TeachersHomeState();
@@ -43,9 +56,9 @@ class _TeachersHomeState extends State<TeachersHome> {
   int _index = 0;
   late PageController _pageController;
 
-  // Profile info
-  String teacherName = 'Dr. Sharma';
-  String teacherEmail = 'dr.sharma@university.edu';
+  // Profile info (initialized from widget)
+  late String teacherName;
+  late String teacherEmail;
   String department = 'CSE';
   String cabin = 'Block A - 305';
 
@@ -124,6 +137,8 @@ class _TeachersHomeState extends State<TeachersHome> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _index);
+    teacherName = widget.userName.isNotEmpty ? widget.userName : 'Dr. Sharma';
+    teacherEmail = widget.userEmail.isNotEmpty ? widget.userEmail : 'dr.sharma@university.edu';
   }
 
   @override
@@ -172,7 +187,10 @@ class _TeachersHomeState extends State<TeachersHome> {
       appBar: AppBar(
         title: Text(widget.universityName),
         leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
-        actions: [Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(ctx), tooltip: 'Search')), const SizedBox(width: 8)],
+        actions: [
+          Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(ctx), tooltip: 'Search')),
+          const SizedBox(width: 8),
+        ],
       ),
 
       drawer: Drawer(
@@ -190,6 +208,23 @@ class _TeachersHomeState extends State<TeachersHome> {
             ListTile(leading: const Icon(Icons.home), title: const Text('Home'), onTap: () { Navigator.pop(context); _goToPage(0); }),
             ListTile(leading: const Icon(Icons.meeting_room), title: const Text('Classrooms'), onTap: () { Navigator.pop(context); _goToPage(1); }),
             ListTile(leading: const Icon(Icons.person), title: const Text('Profile'), onTap: () { Navigator.pop(context); _goToPage(2); }),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: () {
+                Navigator.pop(context); // close drawer
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) => LoginPage(
+                      isDark: widget.isDark,
+                      onToggleTheme: widget.onToggleTheme,
+                    ),
+                  ),
+                      (route) => false,
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -562,18 +597,20 @@ class _ResponsiveFilters extends StatelessWidget {
 }
 
 // ====================== TEACHER TIMETABLE WIDGET (ROW = slot, COL = day) ======================
+// Replace your existing TeacherTimetableWidget with this version
 class TeacherTimetableWidget extends StatelessWidget {
   final Map<String, List<Map<String, String>>> timetable;
   final List<Map<String, String>> slots;
   const TeacherTimetableWidget({super.key, required this.timetable, required this.slots});
 
+  // Same sections as before but more saturated / visible (non-transparent)
   Color _colorForSection(String section) {
     switch (section) {
-      case 'A': return const Color(0xFFDDF2FF);
-      case 'B': return const Color(0xFFFFE5D9);
-      case 'C': return const Color(0xFFE9F8E9);
-      case 'D': return const Color(0xFFF3E8FF);
-      default: return Colors.grey.shade100;
+      case 'A': return const Color(0xFF8FD1FF); // stronger light blue
+      case 'B': return const Color(0xFFFFC8A8); // stronger peach
+      case 'C': return const Color(0xFF9FEFC0); // stronger green
+      case 'D': return const Color(0xFFD9C6FF); // stronger lavender
+      default: return Colors.grey.shade200;
     }
   }
 
@@ -590,6 +627,11 @@ class TeacherTimetableWidget extends StatelessWidget {
       while (padList.length < slots.length) padList.add({'sub': '', 'room': '', 'section': ''});
       padded[d] = padList;
     }
+
+    // border color slightly visible on both themes
+    final borderColor = Theme.of(context).brightness == Brightness.dark ? Colors.white10 : Colors.black12;
+    final subjectTextColor = Colors.black87;
+    final roomTextColor = Colors.black54;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -608,11 +650,15 @@ class TeacherTimetableWidget extends StatelessWidget {
                     height: 64,
                     margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(border: Border.all(color: Colors.black12), borderRadius: BorderRadius.circular(6), color: Colors.grey.shade100),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: borderColor),
+                      borderRadius: BorderRadius.circular(6),
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('(${slots[i]['no']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text('(${slots[i]['no']})', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.65))),
                       const SizedBox(height: 6),
-                      Text(slots[i]['time']!, style: const TextStyle(fontSize: 12)),
+                      Text(slots[i]['time']!, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55))),
                     ]),
                   );
                 }),
@@ -636,11 +682,25 @@ class TeacherTimetableWidget extends StatelessWidget {
                       height: 64,
                       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.black12), color: bg),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: borderColor),
+                        color: bg,
+                      ),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(c['sub'] ?? '', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        Text(
+                          c['sub'] ?? '',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: subjectTextColor),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         const SizedBox(height: 6),
-                        Text(c['room'] ?? '', style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          c['room'] ?? '',
+                          style: TextStyle(fontSize: 12, color: roomTextColor),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ]),
                     );
                   }),
@@ -653,6 +713,7 @@ class TeacherTimetableWidget extends StatelessWidget {
     );
   }
 }
+
 
 // ----------------- Next class small card (no Slot shown) -----------------
 class NextClassCard extends StatelessWidget {
