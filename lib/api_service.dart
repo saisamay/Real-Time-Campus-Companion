@@ -12,7 +12,7 @@ const _userSemesterKey = 'user_semester';
 const _userRoleKey = 'user_role';
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:4000'; // set per environment
+  static const String baseUrl = 'http://10.0.2.2:4000'; // set per environment
 
   // Save token securely
   static Future<void> saveToken(String token) async => await _storage.write(key: _tokenKey, value: token);

@@ -1,5 +1,6 @@
 // lib/admin_homepage.dart
 import 'package:flutter/material.dart';
+import 'main.dart'; // for LoginPage navigation
 
 /// AdminHomePage is a thin wrapper used by the app to navigate to the admin UI.
 /// Do NOT create another MaterialApp here — your main app already has one.
@@ -25,19 +26,19 @@ class AdminHomePage extends StatelessWidget {
     // Forward props to the actual stateful AdminHome widget.
     return AdminHome(
       isDark: isDark,
-      onThemeChanged: onToggleTheme,
+      onToggleTheme: onToggleTheme,
     );
   }
 }
 
 class AdminHome extends StatefulWidget {
   final bool isDark;
-  final ValueChanged<bool> onThemeChanged;
+  final ValueChanged<bool> onToggleTheme;
 
   const AdminHome({
     Key? key,
     required this.isDark,
-    required this.onThemeChanged,
+    required this.onToggleTheme,
   }) : super(key: key);
 
   @override
@@ -490,10 +491,14 @@ class _AdminHomeState extends State<AdminHome> {
     );
   }
 
+  // Build profile: capture widget.onToggleTheme explicitly
   Widget _buildProfile() {
+    final ValueChanged<bool> onToggle = widget.onToggleTheme;
+    final bool isDark = widget.isDark;
+
     return ProfilePage(
-      isDark: widget.isDark,
-      onToggleTheme: widget.onThemeChanged,
+      isDark: isDark,
+      onToggleTheme: onToggle,
       initialName: _adminName,
       initialEmail: _adminEmail,
       initialDeptSection: _adminDeptSection,
@@ -547,18 +552,46 @@ class _AdminHomeState extends State<AdminHome> {
             const Text('Administrator', style: TextStyle(color: Colors.white70)),
           ]),
         ),
-        _menuItem(index: 0, icon: Icons.home, label: 'Home', onTap: () => {}),
-        _menuItem(index: 1, icon: Icons.schedule, label: 'Timetable', onTap: () => {}),
-        _menuItem(index: 2, icon: Icons.event, label: 'Events', onTap: () => {}),
-        _menuItem(index: 3, icon: Icons.people, label: 'Users', onTap: () => {}),
-        _menuItem(index: 4, icon: Icons.person, label: 'Profile', onTap: () => {}),
+        _menuItem(index: 0, icon: Icons.home, label: 'Home', onTap: () {}),
+        _menuItem(index: 1, icon: Icons.schedule, label: 'Timetable', onTap: () {}),
+        _menuItem(index: 2, icon: Icons.event, label: 'Events', onTap: () {}),
+        _menuItem(index: 3, icon: Icons.people, label: 'Users', onTap: () {}),
+        _menuItem(index: 4, icon: Icons.person, label: 'Profile', onTap: () {}),
         const Divider(),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: InkWell(
-            onTap: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logged out (demo)')));
+            onTap: () async {
+              // prompt confirmation before logout
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (dCtx) => AlertDialog(
+                  title: const Text('Log out?'),
+                  content: const Text('Are you sure you want to sign out of this device?'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
+                    FilledButton(onPressed: () => Navigator.pop(dCtx, true), child: const Text('Log out')),
+                  ],
+                ),
+              );
+
+              Navigator.of(context).pop(); // close drawer
+
+              if (confirm == true) {
+                // Navigate to LoginPage and clear navigation stack
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) => LoginPage(
+                      isDark: widget.isDark,
+                      onToggleTheme: widget.onToggleTheme,
+                    ),
+                  ),
+                      (route) => false,
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logout cancelled')));
+              }
             },
             borderRadius: BorderRadius.circular(10),
             child: Container(
@@ -591,7 +624,7 @@ class _AdminHomeState extends State<AdminHome> {
         IconButton(icon: const Icon(Icons.menu, color: Colors.white), onPressed: () => _scaffoldKey.currentState?.openDrawer()),
         const SizedBox(width: 8),
         const Expanded(child: Center(child: Text('Your University Name', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)))),
-        IconButton(icon: Icon(widget.isDark ? Icons.dark_mode : Icons.light_mode, color: Colors.white), onPressed: () => widget.onThemeChanged(!widget.isDark), tooltip: 'Toggle theme'),
+        IconButton(icon: Icon(widget.isDark ? Icons.dark_mode : Icons.light_mode, color: Colors.white), onPressed: () => widget.onToggleTheme(!widget.isDark), tooltip: 'Toggle theme'),
       ]),
       centerTitle: true,
     );
@@ -929,7 +962,17 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
     if (ok == true) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logged out')));
+      // Navigate to LoginPage and clear navigation stack
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => LoginPage(
+            isDark: widget.isDark,
+            onToggleTheme: widget.onToggleTheme,
+          ),
+        ),
+            (route) => false,
+      );
     }
   }
 }

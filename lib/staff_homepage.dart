@@ -1,75 +1,36 @@
+// lib/staff_homepage.dart
 import 'package:flutter/material.dart';
+import 'main.dart'; // for LoginPage navigation
 
-void main() {
-  runApp(const MyApp());
-}
-
-// ----------------------- APP -----------------------
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  bool _isDark = false;
-
-  void _toggleTheme(bool value) => setState(() => _isDark = value);
-
-  @override
-  Widget build(BuildContext context) {
-    final light = ThemeData(
-      colorScheme:
-      ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), brightness: Brightness.light),
-      useMaterial3: true,
-      appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
-      navigationBarTheme: const NavigationBarThemeData(height: 70, elevation: 2),
-    );
-
-    final dark = ThemeData(
-      colorScheme:
-      ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), brightness: Brightness.dark),
-      useMaterial3: true,
-      appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
-      navigationBarTheme: const NavigationBarThemeData(height: 70, elevation: 2),
-    );
-
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'University (Teachers)',
-      theme: light,
-      darkTheme: dark,
-      themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
-      home: TeachersHome(
-        universityName: 'Your University',
-        isDark: _isDark,
-        onToggleTheme: _toggleTheme,
-      ),
-    );
-  }
-}
-
-// ----------------------- TEACHERS HOME -----------------------
-class TeachersHome extends StatefulWidget {
+class StaffHomePage extends StatefulWidget {
   final String universityName;
   final bool isDark;
   final ValueChanged<bool> onToggleTheme;
-  const TeachersHome({super.key, required this.universityName, required this.isDark, required this.onToggleTheme});
+  final String userName;
+  final String userEmail;
+
+  const StaffHomePage({
+    super.key,
+    required this.universityName,
+    required this.isDark,
+    required this.onToggleTheme,
+    required this.userName,
+    required this.userEmail,
+  });
 
   @override
-  State<TeachersHome> createState() => _TeachersHomeState();
+  State<StaffHomePage> createState() => _StaffHomePageState();
 }
 
-class _TeachersHomeState extends State<TeachersHome> {
+class _StaffHomePageState extends State<StaffHomePage> {
   int _index = 0;
   late PageController _pageController;
 
-  // Profile info
-  String teacherName = 'Dr. Sharma';
-  String teacherEmail = 'dr.sharma@university.edu';
-  String department = 'CSE';
-  String cabin = 'Block A - 305';
+  // Profile info — initialized from widget values
+  late String staffName;
+  late String staffEmail;
+  String department = 'Administration';
+  String office = 'Block B - 102';
 
   // simple in-memory password (for demo)
   String _password = 'password123';
@@ -78,6 +39,8 @@ class _TeachersHomeState extends State<TeachersHome> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _index);
+    staffName = widget.userName;
+    staffEmail = widget.userEmail;
   }
 
   @override
@@ -121,7 +84,10 @@ class _TeachersHomeState extends State<TeachersHome> {
       appBar: AppBar(
         title: Text(widget.universityName),
         leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
-        actions: [IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(context)), const SizedBox(width: 8)],
+        actions: [
+          IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(context)),
+          const SizedBox(width: 8),
+        ],
       ),
       drawer: Drawer(
         child: ListView(
@@ -129,10 +95,10 @@ class _TeachersHomeState extends State<TeachersHome> {
             DrawerHeader(
               decoration: BoxDecoration(color: scheme.primary),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const CircleAvatar(radius: 28, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=5")),
+                const CircleAvatar(radius: 28, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=11")),
                 const SizedBox(height: 12),
-                Text(teacherName, style: TextStyle(color: scheme.onPrimary, fontSize: 18)),
-                Text(teacherEmail, style: TextStyle(color: scheme.onPrimary.withOpacity(.8), fontSize: 14)),
+                Text(staffName, style: TextStyle(color: scheme.onPrimary, fontSize: 18)),
+                Text(staffEmail, style: TextStyle(color: scheme.onPrimary.withOpacity(.8), fontSize: 14)),
               ]),
             ),
             ListTile(leading: const Icon(Icons.home), title: const Text('Home'), onTap: () {
@@ -143,6 +109,24 @@ class _TeachersHomeState extends State<TeachersHome> {
               Navigator.pop(context);
               _goToPage(1);
             }),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: () {
+                // close drawer then navigate to LoginPage (clear stack)
+                Navigator.pop(context);
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) => LoginPage(
+                      isDark: widget.isDark,
+                      onToggleTheme: widget.onToggleTheme,
+                    ),
+                  ),
+                      (route) => false,
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -150,7 +134,7 @@ class _TeachersHomeState extends State<TeachersHome> {
         controller: _pageController,
         onPageChanged: (i) => setState(() => _index = i),
         children: [
-          ClassroomsPage(),
+          const ClassroomsPage(),
           _profilePage(context),
         ],
       ),
@@ -177,12 +161,15 @@ class _TeachersHomeState extends State<TeachersHome> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(children: [
-                const CircleAvatar(radius: 40, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=5")),
+                const CircleAvatar(radius: 40, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=11")),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(teacherName, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w800, fontSize: 20)),
+                    Text(staffName, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w800, fontSize: 20)),
                     const SizedBox(height: 6),
+                    Text(staffEmail, style: TextStyle(color: cs.onPrimary.withOpacity(.9))),
+                    const SizedBox(height: 6),
+                    Text('$department • $office', style: TextStyle(color: cs.onPrimary.withOpacity(.9))),
                   ]),
                 ),
               ]),
@@ -197,7 +184,7 @@ class _TeachersHomeState extends State<TeachersHome> {
               icon: Icons.edit,
               label: 'Edit Name',
               onTap: () async {
-                final ctrl = TextEditingController(text: teacherName);
+                final ctrl = TextEditingController(text: staffName);
                 await showDialog(
                   context: context,
                   builder: (_) => AlertDialog(
@@ -206,7 +193,7 @@ class _TeachersHomeState extends State<TeachersHome> {
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                       FilledButton(onPressed: () {
-                        setState(() => teacherName = ctrl.text.trim().isNotEmpty ? ctrl.text.trim() : teacherName);
+                        setState(() => staffName = ctrl.text.trim().isNotEmpty ? ctrl.text.trim() : staffName);
                         Navigator.pop(context);
                       }, child: const Text('Save')),
                     ],
