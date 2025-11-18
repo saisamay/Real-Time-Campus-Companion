@@ -17,7 +17,7 @@ class HomePage extends StatefulWidget {
   final String? userEmail;
   final String? branch;
   final String? section;
-  final String? semester;
+  final int? semester;
 
   const HomePage({
     super.key,
@@ -42,7 +42,7 @@ class _HomePageState extends State<HomePage> {
   // single set of selected values (initialized in initState)
   late String selectedDept;
   late String selectedSection;
-  late String selectedSemester;
+  late int selectedSemester;
 
   // User state (can be populated from AuthService later)
   late String userName;
@@ -75,7 +75,7 @@ class _HomePageState extends State<HomePage> {
     // initialize from widget, with sensible defaults
     selectedDept = (widget.branch ?? 'EEE').toUpperCase();
     selectedSection = (widget.section ?? 'A').toUpperCase();
-    selectedSemester = (widget.semester ?? 'S5').toUpperCase();
+    selectedSemester = (widget.semester ?? 5);
 
     userName = widget.userName ?? 'Student Name';
     userEmail = widget.userEmail ?? 'student@university.edu';
