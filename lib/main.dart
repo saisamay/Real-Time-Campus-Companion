@@ -192,7 +192,7 @@ class _LoginPageState extends State<LoginPage> {
         }
         else {
           // All other roles → home_page.dart (for now)
-          targetPage = StudentHomePage(
+          targetPage = HomePage(
             universityName: _getUniversityNameForRole(role),
             userName: userName,
             userEmail: userEmail,

@@ -12,7 +12,7 @@ class AddTimetablePage extends StatefulWidget {
 
 class _AddTimetablePageState extends State<AddTimetablePage> {
   // configure your backend base URL here
-  final String baseUrl = 'http://10.0.2.2:4000';
+  final String baseUrl = 'http://127.0.0.1:4000';
 
   final _formKey = GlobalKey<FormState>();
 
