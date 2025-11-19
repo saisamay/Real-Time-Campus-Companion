@@ -12,8 +12,8 @@ class AddTimetablePage extends StatefulWidget {
 
 class _AddTimetablePageState extends State<AddTimetablePage> {
   // configure your backend base URL here
+  //final String baseUrl = 'http://127.0.0.1:4000';
   final String baseUrl = 'http://10.0.2.2:4000';
-
   final _formKey = GlobalKey<FormState>();
 
   // selectors
@@ -113,6 +113,10 @@ class _AddTimetablePageState extends State<AddTimetablePage> {
     return Color(int.parse(cleaned, radix: 16));
   }
 
+  // In both add_timetable_page.dart and edit_timetable_page.dart (MODIFIED)
+
+// ...
+
   Widget _buildSlotTile(String day, int idx) {
     final slot = grid[day]![idx];
     return Card(
@@ -145,8 +149,14 @@ class _AddTimetablePageState extends State<AddTimetablePage> {
           const SizedBox(height: 8),
           TextFormField(
             initialValue: slot['subtitle'],
-            decoration: const InputDecoration(labelText: 'Subtitle / room / teacher', isDense: true),
+            decoration: const InputDecoration(labelText: 'Subtitle / Teacher', isDense: true),
             onChanged: (v) => slot['subtitle'] = v,
+          ),
+          const SizedBox(height: 8), // <-- ADDED SPACER
+          TextFormField( // <-- ADDED: ROOM INPUT
+            initialValue: slot['room'],
+            decoration: const InputDecoration(labelText: 'Permanent Room No.', isDense: true),
+            onChanged: (v) => slot['room'] = v,
           ),
         ]),
       ),
@@ -163,13 +173,16 @@ class _AddTimetablePageState extends State<AddTimetablePage> {
       final List<Map<String, dynamic>> gridArr = days.map((d) {
         final slots = grid[d]!
             .map((s) => {
-                  'title': s['title'] ?? '',
-                  'subtitle': s['subtitle'] ?? '',
-                  'color': s['color'] ?? '#FFFFFFFF',
-                })
+          'title': s['title'] ?? '',
+          'subtitle': s['subtitle'] ?? '',
+          'color': s['color'] ?? '#FFFFFFFF',
+          'room': s['room'] ?? '', // <-- ADDED
+        })
             .toList();
         return {'dayName': d, 'slots': slots};
       }).toList();
+
+// ... rest of the payload and API call
 
       final payload = {
         'branch': selectedBranch,

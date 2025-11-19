@@ -8,6 +8,8 @@ import 'teacher_homepage.dart';
 import 'admin_homepage.dart';
 import 'staff_homepage.dart';
 import 'student_homepage.dart';
+import 'forgot_password_page.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const RootApp());
@@ -492,6 +494,27 @@ class _LoginPageState extends State<LoginPage> {
                                           ),
                                         ),
                                       ),
+
+                                      const SizedBox(height: 12),
+
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
+                                          );
+                                        },
+                                        child: const Text(
+                                          "Forgot Password?",
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ),
+
                                     ],
                                   ),
                                 ),

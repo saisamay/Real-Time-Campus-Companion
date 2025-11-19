@@ -12,8 +12,8 @@ const _userSemesterKey = 'user_semester';
 const _userRoleKey = 'user_role';
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:4000'; // set per environment
-
+ // static const String baseUrl = 'http://127.0.0.1:4000'; // set per environment
+  static const String baseUrl = 'http://10.0.2.2:4000';
   // Save token securely
   static Future<void> saveToken(String token) async => await _storage.write(key: _tokenKey, value: token);
   static Future<String?> readToken() async => await _storage.read(key: _tokenKey);
@@ -86,6 +86,49 @@ class ApiService {
       throw Exception(body['error'] ?? 'Login failed (${res.statusCode})');
     }
   }
+
+  static Future<Map<String, dynamic>> forgotPassword({
+    required String email,
+    required String dob, // formatted as YYYY-MM-DD
+  }) async {
+    final url = Uri.parse('$baseUrl/api/auth/forgot-password');
+    final body = jsonEncode({'email': email, 'dob': dob});
+    final res = await http.post(url, headers: await _headers(), body: body);
+
+    // Safely decode into a Map<String, dynamic>
+    Map<String, dynamic> decoded;
+    if (res.body.isNotEmpty) {
+      final dynamic tmp = jsonDecode(res.body);
+      if (tmp is Map) {
+        // copy to a typed map
+        decoded = Map<String, dynamic>.from(tmp);
+      } else {
+        // if server returned something else (e.g. list or string),
+        // put it under a predictable key so callers don't crash.
+        decoded = <String, dynamic>{'data': tmp};
+      }
+    } else {
+      decoded = <String, dynamic>{};
+    }
+
+    // Treat 200/201 as success
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return decoded;
+    } else {
+      // Extract error message safely
+      String err;
+      if (decoded.containsKey('error') && decoded['error'] is String) {
+        err = decoded['error'] as String;
+      } else if (decoded.containsKey('message') && decoded['message'] is String) {
+        err = decoded['message'] as String;
+      } else {
+        err = 'Forgot password failed (${res.statusCode})';
+      }
+      throw Exception(err);
+    }
+  }
+
+
 
   // Get timetable for logged-in user
   static Future<Map<String, dynamic>> getMyTimetable() async {
