@@ -41,14 +41,25 @@ class Slot {
   final String title;
   final String subtitle;
   final String color;
+  final String room; // <-- ADDED: Permanent classroom number
   final int? startSlot;
   final int? endSlot;
-  Slot({required this.title, required this.subtitle, required this.color, this.startSlot, this.endSlot});
+
+  Slot({
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.room, // <-- ADDED
+    this.startSlot,
+    this.endSlot
+  });
+
   factory Slot.fromJson(Map<String, dynamic> json) {
     return Slot(
       title: (json['title'] ?? '').toString(),
       subtitle: (json['subtitle'] ?? '').toString(),
       color: (json['color'] ?? '#FFFFFFFF').toString(),
+      room: (json['room'] ?? '').toString(), // <-- PARSE ROOM
       startSlot: json['startSlot'] != null ? int.tryParse(json['startSlot'].toString()) : null,
       endSlot: json['endSlot'] != null ? int.tryParse(json['endSlot'].toString()) : null,
     );

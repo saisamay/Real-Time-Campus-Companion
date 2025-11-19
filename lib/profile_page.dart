@@ -75,6 +75,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final newCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
 
+    // 1. Show the Dialog
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) {
@@ -87,7 +88,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 TextField(
                   controller: currentCtrl,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Current password'),
+                  decoration:
+                  const InputDecoration(labelText: 'Current password'),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -99,13 +101,16 @@ class _ProfilePageState extends State<ProfilePage> {
                 TextField(
                   controller: confirmCtrl,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Confirm new password'),
+                  decoration:
+                  const InputDecoration(labelText: 'Confirm new password'),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
                 Navigator.pop(ctx, true);
@@ -123,43 +128,77 @@ class _ProfilePageState extends State<ProfilePage> {
     final nw = newCtrl.text.trim();
     final confirm = confirmCtrl.text.trim();
 
+    // 2. Client-side Validation
+    if (current.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter current password')));
+      return;
+    }
     if (nw.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password must be at least 8 characters')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('New password must be at least 8 characters')));
       return;
     }
     if (nw != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New passwords do not match')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('New passwords do not match')));
       return;
     }
 
-    // Show loading UI if you want
-    final uri = Uri.parse('http://localhost:4000/api/user/change-password');
+    // 3. Prepare the URL (Fix for Android Emulator)
+    // Use 10.0.2.2 for Android emulator, localhost for iOS/Web
+    String baseUrl = 'http://localhost:4000';
     try {
-      // If you use token-based auth, include Authorization header
-      final token = ''; // fetch JWT from secure storage if using auth
+      if (Theme.of(context).platform == TargetPlatform.android) {
+        //baseUrl = 'http://127.0.0.1:4000';
+        baseUrl = 'http://10.0.2.2:4000';
+      }
+    } catch (e) {
+      // Fallback if platform check fails
+      baseUrl = 'http://localhost:4000';
+    }
+
+    final uri = Uri.parse('$baseUrl/api/user/change-password');
+
+    // 4. Send Request
+    try {
+      // Show a loading indicator (optional but good for UX)
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Updating password...'), duration: Duration(seconds: 1)));
+
       final resp = await http.post(
         uri,
         headers: {
           'Content-Type': 'application/json',
-          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+          // 'Authorization': 'Bearer YOUR_TOKEN_HERE', // Uncomment if using JWT
         },
         body: jsonEncode({
+          'email': _email, // We must send the email to identify the user
           'currentPassword': current,
           'newPassword': nw,
         }),
       );
 
       if (resp.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password changed successfully. Please re-login.')));
-        // optional: force logout / navigate to login
-        // Navigator.pushReplacement(... LoginPage ...);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Password changed successfully!')));
       } else {
-        final body = jsonDecode(resp.body);
-        final msg = body['error'] ?? body['message'] ?? 'Failed to change password';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        if (!mounted) return;
+        // Try to parse error message from backend
+        String errorMsg = 'Failed to change password';
+        try {
+          final body = jsonDecode(resp.body);
+          errorMsg = body['error'] ?? body['message'] ?? errorMsg;
+        } catch (_) {}
+
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(errorMsg), backgroundColor: Colors.red));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Connection Error: $e'), backgroundColor: Colors.red));
     }
   }
   Future<void> _editEmail() async {

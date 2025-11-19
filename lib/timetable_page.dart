@@ -1,4 +1,4 @@
-// lib/timetable_page.dart
+// lib/timetable_page.dart (RECTIFIED CODE)
 import 'package:flutter/material.dart';
 import 'api_service.dart';
 import 'timetable_model.dart';
@@ -11,6 +11,11 @@ class TimetablePage extends StatefulWidget {
 }
 
 class _TimetablePageState extends State<TimetablePage> {
+  // Placeholder for current user role and Timetable ID (will be fetched)
+  // !!! IMPORTANT: CHANGE THIS FOR TESTING ROLES: 'student', 'teacher', 'classrep', 'admin'
+  String _currentUserRole = 'student';
+  String? _currentTimetableId;
+
   // UI selectors
   String selectedSemester = 'S5';
   String selectedBranch = 'EEE';
@@ -33,64 +38,7 @@ class _TimetablePageState extends State<TimetablePage> {
     {'no': '9', 'time': '4:00 - 4:50'},
   ];
 
-  // fallback sample timetable (used if backend returns nothing)
-  Map<String, List<Map<String, String>>> timetableData = {
-    'Mon': [
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '23EEE303', 'subtitle': '', 'color': '#FFB85C'},
-      {'title': '23EEE304', 'subtitle': '', 'color': '#9EE6A6'},
-      {'title': '23EEE301', 'subtitle': '', 'color': '#659CD8'},
-      {'title': 'Lunch Break', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '23EEE301', 'subtitle': '', 'color': '#659CD8'},
-      {'title': '23EEE304', 'subtitle': '', 'color': '#9EE6A6'},
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
-    ],
-    'Tue': [
-      {'title': 'CIR-23LSE301', 'subtitle': 'Verbal Skills / Aptitude', 'color': '#F4DDB3'},
-      {'title': 'CIR-23LSE301', 'subtitle': 'Aptitude Skills', 'color': '#F4DDB3'},
-      {'title': 'Counselling', 'subtitle': 'Counselling Hour', 'color': '#FF5C5C'},
-      {'title': '23EEE351', 'subtitle': '23EEE369 / 23ELC366', 'color': '#8BD9FF'},
-      {'title': 'Lunch Break', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '23EEE367', 'subtitle': 'Common Elective', 'color': '#F7C94E'},
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '23EEE381', 'subtitle': '23EEE382', 'color': '#FFF799'},
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
-    ],
-    'Wed': [
-      {'title': '23EEE302', 'subtitle': '', 'color': '#6A3F8A'},
-      {'title': '23EEE303', 'subtitle': '', 'color': '#C75B3A'},
-      {'title': '23EEE304', 'subtitle': '', 'color': '#9EE6A6'},
-      {'title': 'Lunch Break', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '23EEE367', 'subtitle': '', 'color': '#F7C94E'},
-      {'title': '23EEE302', 'subtitle': '', 'color': '#6A3F8A'},
-      {'title': '23EEE304', 'subtitle': '', 'color': '#9EE6A6'},
-      {'title': 'Tutorial 1', 'subtitle': '', 'color': '#2CB36A'},
-      {'title': 'Tutorial 2', 'subtitle': '', 'color': '#2CB36A'},
-    ],
-    'Thu': [
-      {'title': '23EEE367', 'subtitle': '23EEE335 (Common Elective)', 'color': '#F7C94E'},
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '23EEE381', 'subtitle': '23EEE382', 'color': '#FFF799'},
-      {'title': 'Lunch Break', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '', 'subtitle': '-', 'color': '#FFFFFFFF'},
-      {'title': '23EEE351', 'subtitle': '23EEE369', 'color': '#8BD9FF'},
-      {'title': 'CIR-23LSE301', 'subtitle': 'Soft Skills', 'color': '#F4DDB3'},
-      {'title': 'CIR-23LSE301', 'subtitle': 'Code HR', 'color': '#F4DDB3'},
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
-    ],
-    'Fri': [
-      {'title': '23EEE301', 'subtitle': '', 'color': '#2A5DA8'},
-      {'title': '23EEE303', 'subtitle': '', 'color': '#C75B3A'},
-      {'title': '23EEE302', 'subtitle': '', 'color': '#6A3F8A'},
-      {'title': '23EEE301', 'subtitle': '', 'color': '#2A5DA8'},
-      {'title': 'Lunch Break', 'subtitle': '', 'color': '#FFFFFFFF'},
-      {'title': '23EEE335', 'subtitle': 'Common Elective', 'color': '#F7C94E'},
-      {'title': '23EEE351', 'subtitle': '23EEE369 / 23ELC366', 'color': '#8BD9FF'},
-      {'title': 'Tutorial 3', 'subtitle': '', 'color': '#2CB36A'},
-      {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'},
-    ],
-  };
+  // REMOVED: fallback sample timetable (timetableData)
 
   // Live data
   Timetable? _currentTimetable;
@@ -122,13 +70,15 @@ class _TimetablePageState extends State<TimetablePage> {
       final tt = Timetable.fromJson(timJson);
       setState(() {
         _currentTimetable = tt;
+        _currentTimetableId = tt.id; // <-- CAPTURE THE ID HERE
         // sync selections with user's section
         if (tt.semester.isNotEmpty) selectedSemester = tt.semester;
         if (tt.branch.isNotEmpty) selectedBranch = tt.branch;
         if (tt.section.isNotEmpty) selectedSection = tt.section;
       });
+      // TODO: Phase 2 - After loading timetable, load today's DailyStatus for this ID
     } catch (e) {
-      // keep fallback data but show error
+      // If loading fails, _currentTimetable remains null, and an error message is shown.
       setState(() {
         _error = e.toString();
       });
@@ -154,6 +104,7 @@ class _TimetablePageState extends State<TimetablePage> {
       final tt = Timetable.fromJson(timJson);
       setState(() {
         _currentTimetable = tt;
+        _currentTimetableId = tt.id;
       });
     } catch (e) {
       setState(() {
@@ -167,64 +118,182 @@ class _TimetablePageState extends State<TimetablePage> {
     }
   }
 
+  // MODIFIED: Implements the role-aware modal for status changes
   void _showCellDetailsFromSlot(String day, int slotIndex, Slot slot) {
+    // Placeholder for any existing temporary status loaded from the backend (Phase 2)
+    // For now, assume no temporary status, use permanent data.
+    final String permanentRoom = slot.room;
+    final String currentTitle = slot.title;
+    final bool canEdit = ['admin', 'teacher', 'classrep'].contains(_currentUserRole);
+    final String timetableId = _currentTimetableId ?? '';
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Wrap(
-              children: [
-                ListTile(
-                  title: Text(slot.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(slot.subtitle),
-                ),
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            // Inner state for the temporary changes form
+            String? selectedOption; // 'CANCELLED', 'SHIFTED', 'ROOM_CHANGE'
+            TextEditingController roomController = TextEditingController(text: permanentRoom);
+            TextEditingController shiftController = TextEditingController();
+
+            // Function to handle the API call for setting status
+            Future<void> _applyStatusChange() async {
+              if (selectedOption == null || timetableId.isEmpty) return;
+
+              Map<String, dynamic> details = {};
+              if (selectedOption == 'ROOM_CHANGE') {
+                details['newRoom'] = roomController.text;
+              } else if (selectedOption == 'SHIFTED') {
+                details['newTime'] = shiftController.text;
+              }
+
+              // NOTE: This will be implemented in Phase 2 using ApiService
+              // try {
+              //   await ApiService.setDailyStatus(
+              //     timetableId: timetableId,
+              //     dayName: day,
+              //     slotIndex: slotIndex,
+              //     status: selectedOption!,
+              //     details: details
+              //   );
+              //   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Status updated successfully!')));
+              // } catch (e) {
+              //   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
+              // }
+
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status set: $selectedOption. API call pending.')));
+              Navigator.pop(context);
+            }
+
+            List<Widget> _buildEditOptions() {
+              if (!canEdit) return [];
+
+              return [
                 const Divider(),
-                ListTile(title: Text('Day: $day')),
-                ListTile(title: Text('Slot: ${slots[slotIndex]['no']}  •  ${slots[slotIndex]['time']}')),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+                Text('⚠️ Temporary Class Status Update (Resets 6:00 PM)', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+
+                // Option 1: Class Cancelled
+                RadioListTile<String>(
+                  title: const Text('Class Cancelled'),
+                  value: 'CANCELLED',
+                  groupValue: selectedOption,
+                  onChanged: (val) => setState(() => selectedOption = val),
                 ),
-              ],
-            ),
-          ),
+
+                // Option 2: Class Timing Shift
+                RadioListTile<String>(
+                  title: const Text('Class Timing Shift'),
+                  value: 'SHIFTED',
+                  groupValue: selectedOption,
+                  onChanged: (val) => setState(() => selectedOption = val),
+                ),
+                if (selectedOption == 'SHIFTED')
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: TextField(
+                      controller: shiftController,
+                      decoration: const InputDecoration(
+                        labelText: 'New Timing Details (e.g., 10:00 - 10:50)',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+
+                // Option 3: Room No Change
+                RadioListTile<String>(
+                  title: const Text('Room No Change'),
+                  value: 'ROOM_CHANGE',
+                  groupValue: selectedOption,
+                  onChanged: (val) => setState(() => selectedOption = val),
+                ),
+                if (selectedOption == 'ROOM_CHANGE')
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: TextField(
+                      controller: roomController,
+                      decoration: const InputDecoration(
+                        labelText: 'New Temporary Room No.',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        // TODO: Phase 2 - Call API to CLEAR temporary status
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Status Cleared. API call pending.')));
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Clear Status'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: selectedOption != null ? _applyStatusChange : null,
+                      child: const Text('Apply Temporary Change'),
+                    ),
+                  ],
+                ),
+              ];
+            }
+
+            return Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      currentTitle,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(slot.subtitle),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.calendar_today),
+                      title: Text('Day: $day'),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.access_time),
+                      title: Text('Slot: ${slots[slotIndex]['no']}  •  ${slots[slotIndex]['time']}'),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.location_on),
+                      // Displaying Permanent Room
+                      title: Text('Permanent Room: ${permanentRoom.isNotEmpty ? permanentRoom : 'N/A'}'),
+                      // TODO: Phase 2 - Add subtitle here to show current temporary room/status if DailyStatus exists
+                    ),
+
+                    ..._buildEditOptions(),
+
+                    if (!canEdit)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Text(
+                          'Note: This is the standard schedule. Status updates (cancellations/shifts) will appear here if changed by faculty.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  void _showCellDetails(String day, int slotIndex, Map<String, String> cell) {
-    // backward-compat fallback (uses sample data structure)
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Wrap(
-              children: [
-                ListTile(
-                  title: Text(cell['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(cell['subtitle'] ?? ''),
-                ),
-                const Divider(),
-                ListTile(title: Text('Day: $day')),
-                ListTile(title: Text('Slot: ${slots[slotIndex]['no']}  •  ${slots[slotIndex]['time']}')),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+  // DELETED: _showCellDetails function is removed.
 
   // Attractive controls card
   Widget _buildControls() {
@@ -338,11 +407,10 @@ class _TimetablePageState extends State<TimetablePage> {
       );
     }
 
-    // if we have server timetable, use it; else fallback to local sample
+    // if we have server timetable, use it. If not, treat it as empty.
     final hasServer = _currentTimetable != null && _currentTimetable!.grid.isNotEmpty;
-    final days = hasServer
-        ? _currentTimetable!.grid.map((d) => d.dayName).toList()
-        : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    // Base days structure (Mon-Fri) always needed for UI structure
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
     // create mapping dayName -> List<Slot> (if server present)
     final Map<String, List<Slot>> gridMap = {};
@@ -379,10 +447,8 @@ class _TimetablePageState extends State<TimetablePage> {
 
           // rows for each day
           ...days.map((day) {
-            // get cells either from server Slot objects or fallback sample map
-            final List<dynamic> cellsDynamic = hasServer
-                ? (gridMap[day] ?? List.generate(9, (_) => Slot(title: '', subtitle: '', color: '#FFFFFFFF')))
-                : (timetableData[day] ?? List.generate(9, (_) => {'title': '', 'subtitle': '', 'color': '#FFFFFFFF'}));
+            // Get slots, providing empty slots if the timetable or day is missing
+            final List<Slot> cells = gridMap[day] ?? List.generate(9, (_) => Slot(title: '', subtitle: '', color: '#FFFFFFFF', room: ''));
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -398,95 +464,55 @@ class _TimetablePageState extends State<TimetablePage> {
                 ),
                 // cells
                 ...List.generate(9, (index) {
-                  if (hasServer) {
-                    final Slot slot = cellsDynamic[index] as Slot;
-                    final bg = hexToColor(slot.color);
-                    return GestureDetector(
-                      onTap: () => _showCellDetailsFromSlot(day, index, slot),
-                      child: Container(
-                        width: 160,
-                        height: 100,
-                        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: bg,
-                          border: Border.all(color: Colors.black12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // title (bigger, fits ~10 big chars)
-                            Text(
-                              slot.title,
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                              maxLines: 1,
+                  final Slot slot = cells[index]; // Always guaranteed to be a Slot object
+                  final bg = hexToColor(slot.color);
+                  return GestureDetector(
+                    onTap: () => _showCellDetailsFromSlot(day, index, slot),
+                    child: Container(
+                      width: 160,
+                      height: 100,
+                      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: bg,
+                        border: Border.all(color: Colors.black12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // title (bigger, fits ~10 big chars)
+                          Text(
+                            slot.title,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          // ADDED: Display the permanent room number
+                          Text(
+                            slot.room.isNotEmpty ? 'Room: ${slot.room}' : 'No Room',
+                            style: TextStyle(fontSize: 11, color: Colors.blueGrey[700], fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          // subtitle (20-30 chars, allow up to 2 lines)
+                          Expanded(
+                            child: Text(
+                              slot.subtitle,
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 6),
-                            // subtitle (20-30 chars, allow up to 3 lines)
-                            Expanded(
-                              child: Text(
-                                slot.subtitle,
-                                style: const TextStyle(fontSize: 12),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.bottomRight,
-                              child: Text('(${slots[index]['no']})', style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                            )
-                          ],
-                        ),
+                          ),
+                          Align(
+                            alignment: Alignment.bottomRight,
+                            child: Text('(${slots[index]['no']})', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                          )
+                        ],
                       ),
-                    );
-                  } else {
-                    final cell = cellsDynamic[index] as Map<String, String>;
-                    final bg = hexToColor(cell['color'] ?? '#FFFFFFFF');
-                    final title = cell['title'] ?? '';
-                    final subtitle = cell['subtitle'] ?? '';
-                    return GestureDetector(
-                      onTap: () => _showCellDetails(day, index, cell),
-                      child: Container(
-                        width: 160,
-                        height: 100,
-                        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: bg,
-                          border: Border.all(color: Colors.black12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // title (bigger, fits ~10 big chars)
-                            Text(
-                              title,
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            // subtitle (20-30 chars, allow up to 3 lines)
-                            Expanded(
-                              child: Text(
-                                subtitle,
-                                style: const TextStyle(fontSize: 12),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.bottomRight,
-                              child: Text('(${slots[index]['no']})', style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                            )
-                          ],
-                        ),
-                      ),
-                    );
-                  }
+                    ),
+                  );
                 })
               ],
             );

@@ -11,8 +11,8 @@ class EditTimetablePage extends StatefulWidget {
 }
 
 class _EditTimetablePageState extends State<EditTimetablePage> {
+  //final String baseUrl = 'http://127.0.0.1:4000';
   final String baseUrl = 'http://10.0.2.2:4000';
-
   final _formKey = GlobalKey<FormState>();
 
   String selectedSemester = 'S5';
@@ -136,6 +136,10 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
     }
   }
 
+  // In both add_timetable_page.dart and edit_timetable_page.dart (MODIFIED)
+
+// ...
+
   Widget _buildSlotTile(String day, int idx) {
     final slot = grid[day]![idx];
     return Card(
@@ -154,14 +158,28 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _pickColorDialog(day, idx),
-              child: Container(width: 40, height: 40, decoration: BoxDecoration(color: _hexToColor(slot['color']!), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.black12))),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _hexToColor(slot['color']!),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.black12),
+                ),
+              ),
             ),
           ]),
           const SizedBox(height: 8),
           TextFormField(
             initialValue: slot['subtitle'],
-            decoration: const InputDecoration(labelText: 'Subtitle / room / teacher', isDense: true),
+            decoration: const InputDecoration(labelText: 'Subtitle / Teacher', isDense: true),
             onChanged: (v) => slot['subtitle'] = v,
+          ),
+          const SizedBox(height: 8), // <-- ADDED SPACER
+          TextFormField( // <-- ADDED: ROOM INPUT
+            initialValue: slot['room'],
+            decoration: const InputDecoration(labelText: 'Permanent Room No.', isDense: true),
+            onChanged: (v) => slot['room'] = v,
           ),
         ]),
       ),
@@ -173,8 +191,15 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
     setState(() => _saving = true);
 
     try {
-      final gridArr = days.map((d) {
-        final slots = grid[d]!.map((s) => {'title': s['title'], 'subtitle': s['subtitle'], 'color': s['color']}).toList();
+      final List<Map<String, dynamic>> gridArr = days.map((d) {
+        final slots = grid[d]!
+            .map((s) => {
+          'title': s['title'] ?? '',
+          'subtitle': s['subtitle'] ?? '',
+          'color': s['color'] ?? '#FFFFFFFF',
+          'room': s['room'] ?? '', // <-- ADDED
+        })
+            .toList();
         return {'dayName': d, 'slots': slots};
       }).toList();
 
