@@ -5,8 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthService {
   // Android emulator → backend
-  //final String baseUrl = 'http://127.0.0.1:4000';
-  final String baseUrl = 'http://10.0.2.2:4000';
+  final String baseUrl = 'http://127.0.0.1:4000';
+  //final String baseUrl = 'http://10.0.2.2:4000';
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   static const _tokenKey = 'auth_token';
