@@ -1,6 +1,8 @@
 // lib/staff_homepage.dart
 import 'package:flutter/material.dart';
-import 'main.dart'; // for LoginPage navigation
+import 'main.dart';
+import 'profile_page.dart';
+// for LoginPage navigation
 
 class StaffHomePage extends StatefulWidget {
   final String universityName;

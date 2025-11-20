@@ -150,8 +150,8 @@ class _ProfilePageState extends State<ProfilePage> {
     String baseUrl = 'http://localhost:4000';
     try {
       if (Theme.of(context).platform == TargetPlatform.android) {
-        //baseUrl = 'http://127.0.0.1:4000';
-        baseUrl = 'http://10.0.2.2:4000';
+        baseUrl = 'http://127.0.0.1:4000';
+        //baseUrl = 'http://10.0.2.2:4000';
       }
     } catch (e) {
       // Fallback if platform check fails

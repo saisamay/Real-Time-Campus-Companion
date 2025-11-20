@@ -6,8 +6,9 @@ import 'find_teacher_page.dart';
 import 'find_classroom_page.dart';
 import 'timetable_page.dart';
 import 'main.dart'; // for LoginPage navigation
-import 'profile_page.dart'; // NEW
-import 'emptyclassrooms_page.dart'; // NEW
+import 'profile_page.dart';
+import 'emptyclassrooms_page.dart';
+import 'Events_page.dart'; // note: file name lowercased and matches EventsPage class
 
 class HomePage extends StatefulWidget {
   final String universityName;
@@ -44,11 +45,11 @@ class _HomePageState extends State<HomePage> {
   late String selectedSection;
   late int selectedSemester;
 
-  // User state (can be populated from AuthService later)
+  // User state
   late String userName;
   late String userEmail;
 
-  // Images and sample data (kept from your design)
+  // Images for Home Page Carousel
   final List<String> eventImages = const [
     'https://picsum.photos/1200/600?random=1',
     'https://picsum.photos/1200/600?random=2',
@@ -190,33 +191,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ---------- EVENTS ----------
-  Widget _eventsPage(BuildContext context) {
-    return Column(
-      children: [
-        const SizedBox(height: 16),
-        CarouselSlider(
-          options: CarouselOptions(
-            height: 220.0,
-            autoPlay: true,
-            enlargeCenterPage: true,
-            viewportFraction: 0.9,
-            autoPlayInterval: const Duration(seconds: 3),
-          ),
-          items: eventImages
-              .map((url) => ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(url, fit: BoxFit.cover, width: double.infinity)))
-              .toList(),
-        ),
-        const SizedBox(height: 20),
-        const Text("Upcoming Events", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text("Join our Annual Tech Fest and Cultural Week starting this Friday!", textAlign: TextAlign.center),
-        ),
-      ],
-    );
-  }
-
+  // ---------- BUILD METHOD ----------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -257,10 +232,18 @@ class _HomePageState extends State<HomePage> {
             Navigator.pop(context);
             _goToPage(2);
           }),
-          ListTile(leading: const Icon(Icons.settings), title: const Text("Settings"), onTap: () => Navigator.pop(context)),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text("Settings"),
+            onTap: () {
+              Navigator.pop(context); // close the drawer
+              _goToPage(4);          // show Profile page (same as tapping the Profile nav)
+            },
+          ),
+
           ListTile(leading: const Icon(Icons.logout), title: const Text("Logout"), onTap: () {
             Navigator.pop(context);
-            // navigate to LoginPage (keeps your prior pattern)
+            // navigate to LoginPage
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(
@@ -276,10 +259,10 @@ class _HomePageState extends State<HomePage> {
       ),
 
       body: PageView(controller: _pageController, onPageChanged: (i) => setState(() => _index = i), children: [
-        _homePage(context), // 0
-        const TimetablePage(embedded: true), // 1
-        _eventsPage(context), // 2
-        const EmptyClassroomsPage(), // 3 -> external file
+        _homePage(context), // 0 - Home Dashboard
+        const TimetablePage(embedded: true), // 1 - Timetable
+        const EventsPage(), // 2 - Events page (external)
+        const EmptyClassroomsPage(), // 3 - External Classrooms
         ProfilePage(
           userName: userName,
           userEmail: userEmail,
@@ -289,32 +272,41 @@ class _HomePageState extends State<HomePage> {
           onToggleTheme: widget.onToggleTheme,
           onUpdateName: _updateUserName,
           onUpdateEmail: _updateUserEmail,
-        ), // 4
+        ), // 4 - Profile
       ]),
 
-      bottomNavigationBar: NavigationBar(selectedIndex: _index, onDestinationSelected: _goToPage, destinations: const [
-        NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-        NavigationDestination(icon: Icon(Icons.schedule), label: 'Timetable'),
-        NavigationDestination(icon: Icon(Icons.event), label: 'Events'),
-        NavigationDestination(icon: Icon(Icons.meeting_room), label: 'Classrooms'),
-        NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
-      ]),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: _goToPage,
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.schedule), label: 'Timetable'),
+          NavigationDestination(icon: Icon(Icons.event), label: 'Events'),
+          NavigationDestination(icon: Icon(Icons.meeting_room), label: 'Classrooms'),
+          NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+      ),
     );
   }
 
   void _openQuickSearch(BuildContext ctx) {
-    showModalBottomSheet(context: ctx, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))), builder: (bCtx) {
-      return Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(bCtx).viewInsets.bottom + 16),
-        child: TextField(
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Search anything…', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
-          onSubmitted: (q) {
-            Navigator.pop(bCtx);
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Searching for: $q')));
-          },
-        ),
-      );
-    });
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (bCtx) {
+        return Padding(
+          padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(bCtx).viewInsets.bottom + 16),
+          child: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'Search anything…', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
+            onSubmitted: (q) {
+              Navigator.pop(bCtx);
+              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Searching for: $q')));
+            },
+          ),
+        );
+      },
+    );
   }
 }
