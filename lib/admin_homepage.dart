@@ -1,6 +1,11 @@
 // lib/admin_homepage.dart
 import 'package:flutter/material.dart';
 import 'main.dart'; // for LoginPage navigation
+import 'package:image_picker/image_picker.dart';
+import 'profile_page.dart';
+import 'add_user.dart';
+import 'edit_user.dart';
+import 'api_service.dart'; // pass as param to AddUserPage if required
 
 /// AdminHomePage is a thin wrapper used by the app to navigate to the admin UI.
 /// Do NOT create another MaterialApp here — your main app already has one.
@@ -53,7 +58,7 @@ class _AdminHomeState extends State<AdminHome> {
   int? _hoveredUserIndex;
   int? _hoveredDrawerIndex;
 
-  // Users using roll numbers
+  // Users using roll numbers (demo). Ideally you'll load real users from backend.
   final List<Map<String, String>> _users = [
     {'id': 'u1', 'roll': 'R001'},
     {'id': 'u2', 'roll': 'R002'},
@@ -76,6 +81,10 @@ class _AdminHomeState extends State<AdminHome> {
   String _adminDeptSection = 'Admin';
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // cached profile loaded from storage/backend
+  Map<String, dynamic>? _cachedProfile;
+  bool _loadingProfile = false;
+
   // Color palette used for events/users — cycles when more items exist
   List<Color> get _palette => [
     const Color(0xFF0D6EFD), // blue
@@ -90,7 +99,85 @@ class _AdminHomeState extends State<AdminHome> {
     return base.withOpacity(opacity);
   }
 
-  // --- Helpers ---
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile(); // load cached profile on start
+  }
+
+  // --- Profile helpers ---
+
+  Future<void> _loadProfile() async {
+    setState(() {
+      _loadingProfile = true;
+    });
+    try {
+      final profile = await ApiService.readUserProfile();
+      if (profile != null) {
+        setState(() {
+          _cachedProfile = profile;
+          // update admin labels for UI defaults
+          _adminName = (profile['name'] as String?) ?? _adminName;
+          _adminEmail = (profile['email'] as String?) ?? _adminEmail;
+          _adminDeptSection = (profile['branch'] as String?) ?? _adminDeptSection;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load profile: $e');
+    } finally {
+      setState(() {
+        _loadingProfile = false;
+      });
+    }
+  }
+
+  /// Picks an image and uploads it for the current adminEmail.
+  Future<void> _pickAndUploadProfileImage(BuildContext ctx) async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (file == null) return;
+    final path = file.path;
+
+    // Use _cachedProfile email if present, otherwise fallback to admin email variable
+    final email = (_cachedProfile != null && _cachedProfile!['email'] is String)
+        ? _cachedProfile!['email'] as String
+        : _adminEmail;
+
+    try {
+      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Uploading profile image...')));
+      final res = await ApiService.uploadAvatarByEmail(email: email, profilePath: path);
+      // Accept various response shapes: { user: {...} } or { data: {...} } or the updated profile itself
+      Map<String, dynamic>? updatedProfile;
+      if (res.containsKey('user') && res['user'] is Map) {
+        updatedProfile = Map<String, dynamic>.from(res['user']);
+      } else if (res.containsKey('data') && res['data'] is Map) {
+        updatedProfile = Map<String, dynamic>.from(res['data']);
+      } else {
+        updatedProfile = Map<String, dynamic>.from(res);
+      }
+
+      // Persist to local storage (if ApiService supports saveUserProfile)
+      try {
+        await ApiService.saveUserProfile(updatedProfile);
+      } catch (e) {
+        // not critical; continue
+        debugPrint('Warning: saveUserProfile failed: $e');
+      }
+
+      setState(() {
+        _cachedProfile = updatedProfile;
+        _adminName = (updatedProfile?['name'] as String?) ?? _adminName;
+        _adminEmail = (updatedProfile?['email'] as String?) ?? _adminEmail;
+        _adminDeptSection = (updatedProfile?['branch'] as String?) ?? _adminDeptSection;
+      });
+
+      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Profile updated')));
+    } catch (e) {
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+    }
+  }
+
+  // --- Helpers for UI pieces ---
   Widget _adaptiveSummaryCards(BoxConstraints c) {
     // Use grid if wide enough
     final isWide = c.maxWidth > 700;
@@ -195,7 +282,19 @@ class _AdminHomeState extends State<AdminHome> {
                     ),
                     SizedBox(
                       width: width < 520 ? width : (width - 56) / 2,
-                      child: OutlinedButton.icon(onPressed: () => setState(() => _currentIndex = 3), icon: const Icon(Icons.person_add), label: const Text('Add User'), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14))),
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          // Navigate to AddUserPage
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => AddUserPage(api: ApiService()), // pass ApiService() to be backward-compatible
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.person_add),
+                        label: const Text('Add User'),
+                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                      ),
                     ),
                   ])
                 ]),
@@ -408,32 +507,17 @@ class _AdminHomeState extends State<AdminHome> {
   }
 
   Widget _buildUsers() {
+    // keep controller for search or roll entry if needed
     final rollController = TextEditingController();
     return Padding(
       padding: const EdgeInsets.all(12.0),
       child: Column(children: [
         ElevatedButton.icon(
           onPressed: () {
-            rollController.clear();
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Add User (Roll Number)'),
-                content: TextField(controller: rollController, decoration: const InputDecoration(labelText: 'Roll Number')),
-                actions: [
-                  TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-                  ElevatedButton(
-                      onPressed: () {
-                        final roll = rollController.text.trim();
-                        if (roll.isEmpty) return;
-                        final id = 'u${DateTime.now().millisecondsSinceEpoch}';
-                        setState(() {
-                          _users.add({'id': id, 'roll': roll});
-                        });
-                        Navigator.of(ctx).pop();
-                      },
-                      child: const Text('Add')),
-                ],
+            // navigate to AddUserPage instead of the old roll-number dialog
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => AddUserPage(api: ApiService()), // pass ApiService() to be backward-compatible
               ),
             );
           },
@@ -466,19 +550,29 @@ class _AdminHomeState extends State<AdminHome> {
                     child: ListTile(
                       leading: CircleAvatar(backgroundColor: avatarColor, child: Text(_avatarFromRoll(roll), style: const TextStyle(color: Colors.white))),
                       title: Text(roll),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () {
-                          final userId = user['id']!;
-                          setState(() {
-                            _users.removeAt(i);
-                            for (final key in _eventRegistrations.keys) {
-                              _eventRegistrations[key]!.remove(userId);
-                            }
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User removed')));
-                        },
-                      ),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () {
+                            // Open EditUserByEmailPage (admin will enter email there)
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditUserByEmailPage()));
+                          },
+                          tooltip: 'Edit user (by email)',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete),
+                          onPressed: () {
+                            final userId = user['id']!;
+                            setState(() {
+                              _users.removeAt(i);
+                              for (final key in _eventRegistrations.keys) {
+                                _eventRegistrations[key]!.remove(userId);
+                              }
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User removed')));
+                          },
+                        ),
+                      ]),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     ),
                   ),
@@ -496,12 +590,43 @@ class _AdminHomeState extends State<AdminHome> {
     final ValueChanged<bool> onToggle = widget.onToggleTheme;
     final bool isDark = widget.isDark;
 
+    // Show loading spinner while profile loads
+    if (_loadingProfile) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // Extract display values from cached profile (fall back to defaults)
+    final profile = _cachedProfile;
+    final displayName = profile?['name'] as String? ?? _adminName;
+    final displayEmail = profile?['email'] as String? ?? _adminEmail;
+    final deptSection = profile?['branch'] as String? ?? _adminDeptSection;
+
+    // Try a few possible profile image field names used across backend code
+    String photo = widget.isDark
+        ? 'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?auto=format&fit=crop&w=800&q=80'
+        : 'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?auto=format&fit=crop&w=800&q=80';
+
+    if (profile != null) {
+      if (profile['profile'] is Map && (profile['profile']['url'] != null)) {
+        photo = profile['profile']['url'] as String;
+      } else if (profile['profileImage'] is Map && profile['profileImage']['url'] != null) {
+        photo = profile['profileImage']['url'] as String;
+      } else if (profile['profile_pic'] is String) {
+        photo = profile['profile_pic'] as String;
+      } else if (profile['photo'] is String) {
+        photo = profile['photo'] as String;
+      }
+    }
+
     return ProfilePage(
       isDark: isDark,
       onToggleTheme: onToggle,
-      initialName: _adminName,
-      initialEmail: _adminEmail,
-      initialDeptSection: _adminDeptSection,
+      initialName: displayName,
+      initialEmail: displayEmail,
+      initialDeptSection: deptSection,
+      initialPhotoUrl: photo,
+      // When user taps "Change Photo" in ProfilePage, this callback will run
+      onChangePhoto: (ctx) => _pickAndUploadProfileImage(ctx),
     );
   }
 
@@ -771,6 +896,9 @@ class ProfilePage extends StatefulWidget {
   final String initialDeptSection;
   final String initialPhotoUrl;
 
+  // Callback to run when user taps "Change Photo" button
+  final ValueChanged<BuildContext>? onChangePhoto;
+
   const ProfilePage({
     super.key,
     required this.isDark,
@@ -779,6 +907,7 @@ class ProfilePage extends StatefulWidget {
     this.initialEmail = 'student@university.edu',
     this.initialDeptSection = 'CSE-B',
     this.initialPhotoUrl = 'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?auto=format&fit=crop&w=800&q=80',
+    this.onChangePhoto,
   });
 
   @override
@@ -790,6 +919,16 @@ class _ProfilePageState extends State<ProfilePage> {
   late String userEmail = widget.initialEmail;
   late String userDeptSection = widget.initialDeptSection;
   late String profileImage = widget.initialPhotoUrl;
+
+  @override
+  void didUpdateWidget(covariant ProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If parent updates initial values (e.g., after upload), reflect them
+    userName = widget.initialName;
+    userEmail = widget.initialEmail;
+    userDeptSection = widget.initialDeptSection;
+    profileImage = widget.initialPhotoUrl;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -898,6 +1037,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _divider() => const Divider(height: 0, indent: 16, endIndent: 16);
 
   void _changeProfileImage() {
+    // If parent provided a callback, run it and let parent handle upload & refresh
+    if (widget.onChangePhoto != null) {
+      widget.onChangePhoto!(context);
+      return;
+    }
+
+    // fallback to demo behavior
     setState(() {
       profileImage = 'https://images.unsplash.com/photo-1525973132219-a04334a76080?auto=format&fit=crop&w=800&q=80';
     });

@@ -1,14 +1,15 @@
-// lib/home_page.dart
+// lib/student_homepage.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 
 import 'find_teacher_page.dart';
 import 'find_classroom_page.dart';
 import 'timetable_page.dart';
-import 'main.dart'; // for LoginPage navigation
+import 'main.dart';
 import 'profile_page.dart';
 import 'emptyclassrooms_page_student.dart';
-import 'Events_page.dart'; // note: file name lowercased and matches EventsPage class
+import 'Events_page.dart';
 
 class StudentHomePage extends StatefulWidget {
   final String universityName;
@@ -20,16 +21,20 @@ class StudentHomePage extends StatefulWidget {
   final String? section;
   final int? semester;
 
+  // Matches main.dart
+  final String? profile;
+
   const StudentHomePage({
     super.key,
     required this.universityName,
-    this.isDark = false, // default
-    this.onToggleTheme, // optional
+    this.isDark = false,
+    this.onToggleTheme,
     this.userName,
     this.userEmail,
     this.branch,
     this.section,
     this.semester,
+    this.profile,
   });
 
   @override
@@ -40,12 +45,11 @@ class _HomePageState extends State<StudentHomePage> {
   int _index = 0;
   late PageController _pageController;
 
-  // single set of selected values (initialized in initState)
-  late String selectedDept;
+  // selections
+  late String selectedBranch;
   late String selectedSection;
-  late int selectedSemester;
 
-  // User state
+  // user info
   late String userName;
   late String userEmail;
 
@@ -73,10 +77,8 @@ class _HomePageState extends State<StudentHomePage> {
     super.initState();
     _pageController = PageController(initialPage: _index);
 
-    // initialize from widget, with sensible defaults
-    selectedDept = (widget.branch ?? 'EEE').toUpperCase();
+    selectedBranch = (widget.branch ?? 'EEE').toUpperCase();
     selectedSection = (widget.section ?? 'A').toUpperCase();
-    selectedSemester = (widget.semester ?? 5);
 
     userName = widget.userName ?? 'Student Name';
     userEmail = widget.userEmail ?? 'student@university.edu';
@@ -90,16 +92,40 @@ class _HomePageState extends State<StudentHomePage> {
 
   void _goToPage(int index) {
     setState(() => _index = index);
-    _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut
+    );
   }
 
-  // Allow ProfilePage to update name/email
-  void _updateUserName(String name) => setState(() => userName = name);
-  void _updateUserEmail(String email) => setState(() => userEmail = email);
+  // ✅ HELPER: Logic to decide if image is Network, File, or Asset
+  ImageProvider? _getSafeImageProvider(String? path) {
+    if (path == null || path.trim().isEmpty) return null;
+
+    final trimmed = path.trim();
+
+    // 1. Network Image
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return NetworkImage(trimmed);
+    }
+
+    // 2. Local File
+    try {
+      final file = File(trimmed);
+      if (file.existsSync()) {
+        return FileImage(file);
+      }
+    } catch (e) {
+      // Ignore errors, return null
+    }
+
+    return null;
+  }
 
   // ---------- HOME PAGE CONTENT ----------
   Widget _homePage(BuildContext context) {
-    final imagesForPreview = timetableData[selectedDept]?[selectedSection] ?? <String>[];
+    final imagesForPreview = timetableData[selectedBranch]?[selectedSection] ?? <String>[];
     final previewImage = imagesForPreview.isNotEmpty ? imagesForPreview.first : null;
     final scheme = Theme.of(context).colorScheme;
 
@@ -107,7 +133,6 @@ class _HomePageState extends State<StudentHomePage> {
       padding: EdgeInsets.zero,
       children: [
         const SizedBox(height: 16),
-        // Events carousel
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: ClipRRect(
@@ -126,10 +151,7 @@ class _HomePageState extends State<StudentHomePage> {
             ),
           ),
         ),
-
         const SizedBox(height: 16),
-
-        // Timetable preview card
         if (previewImage != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -152,7 +174,7 @@ class _HomePageState extends State<StudentHomePage> {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            '$selectedDept - $selectedSection',
+                            '$selectedBranch - $selectedSection',
                             style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onPrimaryContainer),
                           ),
                         ),
@@ -169,9 +191,7 @@ class _HomePageState extends State<StudentHomePage> {
               ),
             ),
           ),
-
         const SizedBox(height: 20),
-
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
           child: Text("Announcements", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -181,19 +201,16 @@ class _HomePageState extends State<StudentHomePage> {
           title: Text("Tech Fest this weekend!"),
           subtitle: Text("Don't miss the cultural night."),
         ),
-        const ListTile(
-          leading: Icon(Icons.book),
-          title: Text("Library open till 10 PM"),
-          subtitle: Text("Extended hours for exams."),
-        ),
         const SizedBox(height: 16),
       ],
     );
   }
 
-  // ---------- BUILD METHOD ----------
   @override
   Widget build(BuildContext context) {
+    // Calculate provider once for usage in Drawer
+    final drawerImageProvider = _getSafeImageProvider(widget.profile);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.universityName),
@@ -203,12 +220,18 @@ class _HomePageState extends State<StudentHomePage> {
           const SizedBox(width: 8),
         ],
       ),
-
       drawer: Drawer(
         child: ListView(padding: EdgeInsets.zero, children: [
           UserAccountsDrawerHeader(
             decoration: const BoxDecoration(color: Color(0xFFA4123F)),
-            currentAccountPicture: const CircleAvatar(backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
+            // ✅ FIXED: Using _getSafeImageProvider with fallback child logic
+            currentAccountPicture: CircleAvatar(
+              backgroundImage: drawerImageProvider,
+              backgroundColor: Colors.white24,
+              child: drawerImageProvider == null
+                  ? const Icon(Icons.person, size: 40, color: Colors.white)
+                  : null,
+            ),
             accountName: Text(userName),
             accountEmail: Text(userEmail),
           ),
@@ -236,13 +259,12 @@ class _HomePageState extends State<StudentHomePage> {
             leading: const Icon(Icons.settings),
             title: const Text("Settings"),
             onTap: () {
-              Navigator.pop(context); // close the drawer
-              _goToPage(4);          // show Profile page (same as tapping the Profile nav)
+              Navigator.pop(context);
+              _goToPage(4);
             },
           ),
           ListTile(leading: const Icon(Icons.logout), title: const Text("Logout"), onTap: () {
             Navigator.pop(context);
-            // navigate to LoginPage
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(
@@ -256,24 +278,26 @@ class _HomePageState extends State<StudentHomePage> {
           }),
         ]),
       ),
+      body: PageView(
+          controller: _pageController,
+          onPageChanged: (i) => setState(() => _index = i),
+          children: [
+            _homePage(context),
+            const TimetablePage(embedded: true),
+            const EventsPage(),
+            const EmptyClassroomsPage(),
 
-      body: PageView(controller: _pageController, onPageChanged: (i) => setState(() => _index = i), children: [
-        _homePage(context), // 0 - Home Dashboard
-        const TimetablePage(embedded: true), // 1 - Timetable
-        const EventsPage(), // 2 - Events page (external)
-        const EmptyClassroomsPage(), // 3 - External Classrooms
-        ProfilePage(
-          userName: userName,
-          userEmail: userEmail,
-          dept: selectedDept,
-          section: selectedSection,
-          isDark: widget.isDark,
-          onToggleTheme: widget.onToggleTheme,
-          onUpdateName: _updateUserName,
-          onUpdateEmail: _updateUserEmail,
-        ), // 4 - Profile
-      ]),
-
+            // ✅ ProfilePage integration
+            ProfilePage(
+              userName: userName,
+              userEmail: userEmail,
+              dept: selectedBranch,
+              section: selectedSection,
+              isDark: widget.isDark,
+              onToggleTheme: widget.onToggleTheme,
+              initialPhotoUrl: widget.profile,
+            ),
+          ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: _goToPage,

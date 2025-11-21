@@ -134,6 +134,8 @@ class _LoginPageState extends State<LoginPage> {
     ];
   }
 
+  // Inside _LoginPageState in lib/main.dart
+
   void _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -146,66 +148,73 @@ class _LoginPageState extends State<LoginPage> {
       final res = await _auth.login(email, password);
       if (res['ok'] == true) {
         final user = res['user'] as Map<String, dynamic>? ?? {};
-
-        // Get user role and normalize it (lowercase, trim whitespace)
+        print("RAW USER DATA: $user");
+        // 1. Get user role and normalize it
         final rawRole = (user['role'] as String?)?.trim().toLowerCase() ?? '';
         final role = rawRole.isEmpty ? 'student' : rawRole;
 
-        // Common user info
+        // 2. Extract Common user info
         final userName = user['name'] ?? user['email'] ?? 'User';
         final userEmail = user['email'] ?? '';
-        final branch = user['branch'];
-        final section = user['section'];
+        final branch = user['branch'] ?? 'N/A'; // Default if null
+        final section = user['section'] ?? 'N/A';
         final semester = user['semester'];
 
+        // 3. Extract Profile Image (Safe handling)
+        // Checks if it exists and is not an empty string
+        final String? profile = (user['profile'] != null && user['profile'].toString().isNotEmpty)
+            ? user['profile'].toString()
+            : null;
+        print("EXTRACTED PROFILE URL: $profile");
         Widget targetPage;
 
+        // 4. Pass the 'profile' variable to all page constructors
         if (role == 'teacher') {
-          // ✅ TEACHER → teacher_homepage.dart
           targetPage = TeacherHomePage(
             universityName: "Amrita Vishwa Vidyapeetham — Teacher",
             userName: userName,
             userEmail: userEmail,
+            //profile: profile,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
-
-        }else if (role == 'staff') {
+        } else if (role == 'staff') {
           targetPage = StaffHomePage(
             universityName: "Amrita Vishwa Vidyapeetham — Staff",
             userName: userName,
             userEmail: userEmail,
+            //profile: profile,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
-        }
-        else if (role == 'admin') {
+        } else if (role == 'admin') {
           targetPage = AdminHomePage(
             universityName: "Amrita Vishwa Vidyapeetham — Admin",
             userName: userName,
             userEmail: userEmail,
+            //profile: profile,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
-        }
-        else if (role == 'classrep') {
-          targetPage = HomePage(
+        } else if (role == 'classrep') {
+          targetPage = HomePage( // Assuming this is your CR page
             universityName: _getUniversityNameForRole(role),
             userName: userName,
             userEmail: userEmail,
+            profile: profile,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
             branch: branch,
             section: section,
             semester: semester,
           );
-        }
-        else {
-          // All other roles → home_page.dart (for now)
+        } else {
+          // Student
           targetPage = StudentHomePage(
             universityName: _getUniversityNameForRole(role),
             userName: userName,
             userEmail: userEmail,
+            profile: profile, // ✅ Passed here
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
             branch: branch,
@@ -214,7 +223,6 @@ class _LoginPageState extends State<LoginPage> {
           );
         }
 
-        // Navigate to the appropriate page
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -222,7 +230,6 @@ class _LoginPageState extends State<LoginPage> {
           );
         }
       } else {
-        // Login failed
         final err = res['error'] ?? 'Login failed';
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -231,7 +238,6 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
     } catch (e) {
-      // Error occurred
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),

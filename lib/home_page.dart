@@ -1,4 +1,5 @@
 // lib/home_page.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 
@@ -8,7 +9,7 @@ import 'timetable_page.dart';
 import 'main.dart'; // for LoginPage navigation
 import 'profile_page.dart';
 import 'emptyclassrooms_page.dart';
-import 'Events_page.dart'; // note: file name lowercased and matches EventsPage class
+import 'Events_page.dart';
 
 class HomePage extends StatefulWidget {
   final String universityName;
@@ -20,16 +21,20 @@ class HomePage extends StatefulWidget {
   final String? section;
   final int? semester;
 
+  // ✅ FIXED: Changed from Map to String to match main.dart
+  final String? profile;
+
   const HomePage({
     super.key,
     required this.universityName,
-    this.isDark = false, // default
-    this.onToggleTheme, // optional
+    this.isDark = false,
+    this.onToggleTheme,
     this.userName,
     this.userEmail,
     this.branch,
     this.section,
     this.semester,
+    this.profile,
   });
 
   @override
@@ -40,7 +45,7 @@ class _HomePageState extends State<HomePage> {
   int _index = 0;
   late PageController _pageController;
 
-  // single set of selected values (initialized in initState)
+  // selections
   late String selectedDept;
   late String selectedSection;
   late int selectedSemester;
@@ -73,7 +78,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _pageController = PageController(initialPage: _index);
 
-    // initialize from widget, with sensible defaults
+    // Initialize from widget
     selectedDept = (widget.branch ?? 'EEE').toUpperCase();
     selectedSection = (widget.section ?? 'A').toUpperCase();
     selectedSemester = (widget.semester ?? 5);
@@ -90,12 +95,36 @@ class _HomePageState extends State<HomePage> {
 
   void _goToPage(int index) {
     setState(() => _index = index);
-    _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut
+    );
   }
 
-  // Allow ProfilePage to update name/email
-  void _updateUserName(String name) => setState(() => userName = name);
-  void _updateUserEmail(String email) => setState(() => userEmail = email);
+  // ✅ HELPER: Logic to decide if image is Network, File, or Asset
+  ImageProvider _getProfileProvider() {
+    final String? path = widget.profile;
+
+    if (path == null || path.isEmpty) {
+      return const AssetImage('assets/default_avatar.png');
+    }
+
+    if (path.startsWith('http')) {
+      return NetworkImage(path);
+    }
+
+    try {
+      final file = File(path);
+      if (file.existsSync()) {
+        return FileImage(file);
+      }
+    } catch (e) {
+      // Ignore error
+    }
+
+    return const AssetImage('assets/default_avatar.png');
+  }
 
   // ---------- HOME PAGE CONTENT ----------
   Widget _homePage(BuildContext context) {
@@ -206,9 +235,13 @@ class _HomePageState extends State<HomePage> {
 
       drawer: Drawer(
         child: ListView(padding: EdgeInsets.zero, children: [
+          // ✅ Updated Drawer Header with correct Image Logic
           UserAccountsDrawerHeader(
             decoration: const BoxDecoration(color: Color(0xFFA4123F)),
-            currentAccountPicture: const CircleAvatar(backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
+            currentAccountPicture: CircleAvatar(
+              backgroundImage: _getProfileProvider(), // Uses helper
+              backgroundColor: Colors.white24,
+            ),
             accountName: Text(userName),
             accountEmail: Text(userEmail),
           ),
@@ -236,14 +269,13 @@ class _HomePageState extends State<HomePage> {
             leading: const Icon(Icons.settings),
             title: const Text("Settings"),
             onTap: () {
-              Navigator.pop(context); // close the drawer
-              _goToPage(4);          // show Profile page (same as tapping the Profile nav)
+              Navigator.pop(context);
+              _goToPage(4); // Go to Profile Index
             },
           ),
 
           ListTile(leading: const Icon(Icons.logout), title: const Text("Logout"), onTap: () {
             Navigator.pop(context);
-            // navigate to LoginPage
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(
@@ -258,23 +290,27 @@ class _HomePageState extends State<HomePage> {
         ]),
       ),
 
-      body: PageView(controller: _pageController, onPageChanged: (i) => setState(() => _index = i), children: [
-        _homePage(context), // 0 - Home Dashboard
-        const TimetablePage(embedded: true), // 1 - Timetable
-        const EventsPage(), // 2 - Events page (external)
-        const EmptyClassroomsPage(), // 3 - External Classrooms
-        ProfilePage(
-          userName: userName,
-          userEmail: userEmail,
-          dept: selectedDept,
-          section: selectedSection,
-          isDark: widget.isDark,
-          onToggleTheme: widget.onToggleTheme,
-          onUpdateName: _updateUserName,
-          onUpdateEmail: _updateUserEmail,
-        ), // 4 - Profile
-      ]),
+      body: PageView(
+          controller: _pageController,
+          onPageChanged: (i) => setState(() => _index = i),
+          children: [
+            _homePage(context),
+            const TimetablePage(embedded: true),
+            const EventsPage(),
+            const EmptyClassroomsPage(),
 
+            // ✅ FIXED: Correctly passing parameters to ProfilePage
+            ProfilePage(
+              userName: userName,
+              userEmail: userEmail,
+              dept: selectedDept,
+              section: selectedSection,
+              isDark: widget.isDark,
+              onToggleTheme: widget.onToggleTheme,
+              // ✅ Pass string directly
+              initialPhotoUrl: widget.profile,
+            ),
+          ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: _goToPage,
