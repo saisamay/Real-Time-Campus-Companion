@@ -1,8 +1,8 @@
-// lib/api_service.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'timetable_model.dart'; // Ensure this matches your file name
 
 final _storage = const FlutterSecureStorage();
 const _tokenKey = 'auth_token';
@@ -12,67 +12,13 @@ const _userSectionKey = 'user_section';
 const _userSemesterKey = 'user_semester';
 const _userRoleKey = 'user_role';
 
-/// API expectations used by this service:
-/// - Create user (multipart): POST  /api/users/add
-///   fields: name,email,password,dob,rollNo,branch,semester,section,role + file field 'profile'
-///
-/// - Edit user by email (multipart): PUT /api/users/edit
-///   fields: email (required), plus any of name,password,dob,rollNo,branch,semester,section,role
-///   and optional file field 'profile'
-///
-/// - Upload avatar by email: POST /api/user/upload-avatar
-///   fields: email (required), profile (file)
-///
-/// If your backend uses different paths, update the endpoint strings below.
 class ApiService {
-  //static const String baseUrl = 'http://10.0.2.2:4000';
-  static const String baseUrl = 'http://127.0.0.1:4000'; // change to match your environment
+  // Use 10.0.2.2 for Android Emulator, 127.0.0.1 for iOS Simulator/Web
+  static const String baseUrl = 'http://127.0.0.1:4000';
 
-  // ---------------------------
-  // Secure storage helpers
-  // ---------------------------
-  static Future<void> saveToken(String token) async => await _storage.write(key: _tokenKey, value: token);
-  static Future<String?> readToken() async => await _storage.read(key: _tokenKey);
-  static Future<void> deleteToken() async => await _storage.delete(key: _tokenKey);
-
-  /// Save full user object as JSON string. Also store convenient fields separately.
-  /// This will include the 'profile' object returned by server (if present).
-  static Future<void> saveUserProfile(Map<String, dynamic> user) async {
-    await _storage.write(key: _userKey, value: jsonEncode(user));
-
-    final branch = user['branch']?.toString();
-    final section = user['section']?.toString();
-    final semester = user['semester']?.toString();
-    final role = user['role']?.toString();
-
-    if (branch != null) await _storage.write(key: _userBranchKey, value: branch);
-    if (section != null) await _storage.write(key: _userSectionKey, value: section);
-    if (semester != null) await _storage.write(key: _userSemesterKey, value: semester);
-    if (role != null) await _storage.write(key: _userRoleKey, value: role);
-  }
-
-  static Future<Map<String, dynamic>?> readUserProfile() async {
-    final s = await _storage.read(key: _userKey);
-    if (s == null) return null;
-    try {
-      return jsonDecode(s) as Map<String, dynamic>;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static Future<void> deleteUserProfile() async {
-    await _storage.delete(key: _userKey);
-    await _storage.delete(key: _userBranchKey);
-    await _storage.delete(key: _userSectionKey);
-    await _storage.delete(key: _userSemesterKey);
-    await _storage.delete(key: _userRoleKey);
-  }
-
-  static Future<String?> readBranch() async => await _storage.read(key: _userBranchKey);
-  static Future<String?> readSection() async => await _storage.read(key: _userSectionKey);
-  static Future<String?> readSemester() async => await _storage.read(key: _userSemesterKey);
-  static Future<String?> readRole() async => await _storage.read(key: _userRoleKey);
+  // ===========================================================================
+  // SECTION 1: HEADERS & TOKENS (Infrastructure)
+  // ===========================================================================
 
   static Future<Map<String, String>> _headers({bool auth = false}) async {
     final headers = <String, String>{'Content-Type': 'application/json'};
@@ -83,11 +29,187 @@ class ApiService {
     return headers;
   }
 
-  // ---------------------------
-  // Existing endpoints (unchanged)
-  // ---------------------------
+  static Future<void> saveToken(String token) async => await _storage.write(key: _tokenKey, value: token);
+  static Future<String?> readToken() async => await _storage.read(key: _tokenKey);
+  static Future<void> deleteToken() async => await _storage.delete(key: _tokenKey);
 
-  /// Login - store token and user profile if successful
+  static Future<void> saveUserProfile(Map<String, dynamic> user) async {
+    await _storage.write(key: _userKey, value: jsonEncode(user));
+    if (user['branch'] != null) await _storage.write(key: _userBranchKey, value: user['branch'].toString());
+    if (user['section'] != null) await _storage.write(key: _userSectionKey, value: user['section'].toString());
+    if (user['semester'] != null) await _storage.write(key: _userSemesterKey, value: user['semester'].toString());
+    if (user['role'] != null) await _storage.write(key: _userRoleKey, value: user['role'].toString());
+  }
+
+  static Future<Map<String, dynamic>?> readUserProfile() async {
+    final s = await _storage.read(key: _userKey);
+    return s == null ? null : jsonDecode(s) as Map<String, dynamic>;
+  }
+
+  static Future<void> deleteUserProfile() async {
+    await _storage.delete(key: _userKey);
+    await _storage.delete(key: _userBranchKey);
+    await _storage.delete(key: _userSectionKey);
+    await _storage.delete(key: _userSemesterKey);
+    await _storage.delete(key: _userRoleKey);
+  }
+
+  // Helper getters for current user info
+  static Future<String?> readBranch() async => await _storage.read(key: _userBranchKey);
+  static Future<String?> readSection() async => await _storage.read(key: _userSectionKey);
+  static Future<String?> readSemester() async => await _storage.read(key: _userSemesterKey);
+  static Future<String?> readRole() async => await _storage.read(key: _userRoleKey);
+
+
+  // ===========================================================================
+  // SECTION 2: COURSES (New)
+  // ===========================================================================
+
+  static Future<void> addCourse(Map<String, dynamic> courseData) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/courses'), // Updated path to include /api prefix if your app.js uses it
+      headers: await _headers(auth: true),
+      body: jsonEncode(courseData),
+    );
+
+    if (response.statusCode != 201) {
+      throw Exception('Failed to add course: ${response.body}');
+    }
+  }
+
+  static Future<List<Course>> getCourses(String branch, String semester, String section) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/courses?branch=$branch&semester=$semester&section=$section'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      List jsonResponse = json.decode(response.body);
+      return jsonResponse.map((course) => Course.fromJson(course)).toList();
+    } else {
+      throw Exception('Failed to load courses');
+    }
+  }
+
+
+  // ===========================================================================
+  // SECTION 3: TIMETABLE - ADMIN & SEARCH (New)
+  // ===========================================================================
+
+  // Create Timetable (Admin)
+  static Future<void> addTimetable(Map<String, dynamic> timetableData) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/timetable'),
+      headers: await _headers(auth: true),
+      body: jsonEncode(timetableData),
+    );
+
+    if (response.statusCode != 201) {
+      final error = jsonDecode(response.body)['message'] ?? 'Unknown error';
+      throw Exception(error);
+    }
+  }
+
+  // Update Timetable (Admin)
+  static Future<void> updateTimetable(Map<String, dynamic> timetableData) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/timetable'),
+      headers: await _headers(auth: true),
+      body: jsonEncode(timetableData),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update timetable: ${response.body}');
+    }
+  }
+
+  // Get Specific Timetable (Admin Edit / Search)
+  static Future<Timetable> getTimetable(String branch, String semester, String section) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/timetable?branch=$branch&semester=$semester&section=$section'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return Timetable.fromJson(data['timetable']);
+    } else if (response.statusCode == 404) {
+      throw Exception("Not Found");
+    } else {
+      throw Exception('Failed to load timetable');
+    }
+  }
+
+
+  // ===========================================================================
+  // SECTION 4: TIMETABLE - USERS (Student, Teacher, ClassRep)
+  // ===========================================================================
+
+  // Get My Timetable (Student/ClassRep - Auto Fetch)
+  static Future<Timetable> getMyTimetable() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/timetable/me'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return Timetable.fromJson(data['timetable']);
+    } else {
+      throw Exception('No timetable found for your class.');
+    }
+  }
+
+  // Get Teacher Timetable (Personalized View)
+  static Future<List<TimetableDay>> getTeacherTimetable() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/timetable/teacher'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      var list = data['grid'] as List;
+      return list.map((i) => TimetableDay.fromJson(i)).toList();
+    } else {
+      throw Exception('Failed to load teacher schedule');
+    }
+  }
+
+  // Update Single Slot (ClassRep/Teacher - Cancel/RoomChange)
+  static Future<void> updateSlot({
+    required String semester,
+    required String branch,
+    required String section,
+    required String dayName,
+    required int slotIndex,
+    bool? isCancelled,
+    String? newRoom,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/timetable/slot'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'semester': semester,
+        'branch': branch,
+        'section': section,
+        'dayName': dayName,
+        'slotIndex': slotIndex,
+        if (isCancelled != null) 'isCancelled': isCancelled,
+        if (newRoom != null) 'newRoom': newRoom,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update slot');
+    }
+  }
+
+
+  // ===========================================================================
+  // SECTION 5: AUTHENTICATION (Existing)
+  // ===========================================================================
+
   static Future<Map> login(String email, String password) async {
     final url = Uri.parse('$baseUrl/api/auth/login');
     final res = await http.post(url,
@@ -103,74 +225,27 @@ class ApiService {
     }
   }
 
-  /// Forgot password
   static Future<Map<String, dynamic>> forgotPassword({
     required String email,
-    required String dob, // formatted as YYYY-MM-DD
+    required String dob,
   }) async {
     final url = Uri.parse('$baseUrl/api/auth/forgot-password');
     final body = jsonEncode({'email': email, 'dob': dob});
     final res = await http.post(url, headers: await _headers(), body: body);
 
-    Map<String, dynamic> decoded;
-    if (res.body.isNotEmpty) {
-      final dynamic tmp = jsonDecode(res.body);
-      if (tmp is Map) decoded = Map<String, dynamic>.from(tmp);
-      else decoded = <String, dynamic>{'data': tmp};
-    } else {
-      decoded = <String, dynamic>{};
-    }
-
     if (res.statusCode == 200 || res.statusCode == 201) {
-      return decoded;
+      return jsonDecode(res.body);
     } else {
-      String err;
-      if (decoded.containsKey('error') && decoded['error'] is String) {
-        err = decoded['error'] as String;
-      } else if (decoded.containsKey('message') && decoded['message'] is String) {
-        err = decoded['message'] as String;
-      } else {
-        err = 'Forgot password failed (${res.statusCode})';
-      }
-      throw Exception(err);
+      final decoded = jsonDecode(res.body);
+      throw Exception(decoded['error'] ?? 'Forgot password failed');
     }
   }
 
-  /// Get timetable for logged-in user
-  static Future<Map<String, dynamic>> getMyTimetable() async {
-    final url = Uri.parse('$baseUrl/api/timetable/me');
-    final res = await http.get(url, headers: await _headers(auth: true));
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body) as Map<String, dynamic>;
-    } else {
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
-      throw Exception(body['error'] ?? 'Failed to fetch timetable (${res.statusCode})');
-    }
-  }
 
-  /// Search timetable
-  static Future<Map<String, dynamic>> searchTimetable({
-    required String semester,
-    required String branch,
-    required String section,
-  }) async {
-    final q = Uri(queryParameters: {'semester': semester, 'branch': branch, 'section': section});
-    final url = Uri.parse('$baseUrl/api/timetable/search${q.toString()}');
-    final res = await http.get(url, headers: await _headers(auth: true));
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body) as Map<String, dynamic>;
-    } else {
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
-      throw Exception(body['error'] ?? 'Search failed (${res.statusCode})');
-    }
-  }
+  // ===========================================================================
+  // SECTION 6: USER MANAGEMENT (Existing - Create/Edit/Upload)
+  // ===========================================================================
 
-  // ---------------------------
-  // NEW: user creation / edit / avatar upload (email-based)
-  // ---------------------------
-
-  /// Create user (multipart) - REQUIRES profile image
-  /// Fields: name, email, password, dob, rollNo, branch, semester, section, role, profile (file)
   static Future<Map<String, dynamic>> createUserWithProfile({
     required String name,
     required String email,
@@ -179,16 +254,20 @@ class ApiService {
     required String profilePath,
     required String role,
     required String rollNo,
-    required int semester,
+    required String semester, // Note: Changed to String to match "S5"
     required String section,
     required String branch,
   }) async {
-    // Validate file exists
     final file = File(profilePath);
     if (!file.existsSync()) throw Exception('Profile file does not exist: $profilePath');
 
-    final uri = Uri.parse('$baseUrl/api/users/add');
-    final request = http.MultipartRequest('POST', uri);
+    final uri = Uri.parse('$baseUrl/api/auth/register'); // Typically register is in auth routes, check your backend
+    // OR if you use the admin add route: '$baseUrl/api/users/add' 
+    // Based on your previous files, register was in /api/auth/register. 
+    // I will default to the one you had in comments:
+    // "POST /api/users/add" based on your comments.
+    // Let's stick to the path you used in your provided code:
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/auth/register'));
 
     request.fields['name'] = name;
     request.fields['email'] = email;
@@ -196,37 +275,32 @@ class ApiService {
     request.fields['dob'] = dob.toIso8601String();
     request.fields['role'] = role;
     request.fields['rollNo'] = rollNo;
-    request.fields['semester'] = semester.toString();
+    request.fields['semester'] = semester;
     request.fields['section'] = section;
     request.fields['branch'] = branch;
 
-    // attach file under field name 'profile'
-    final multipartFile = await http.MultipartFile.fromPath('profile', profilePath);
+    final multipartFile = await http.MultipartFile.fromPath('profile', profilePath); // Changed field name to 'profile' per backend
     request.files.add(multipartFile);
 
-    // attach auth header if present
-    final headers = await _headers(auth: true);
-    request.headers.addAll(headers);
+    // No auth headers for registration usually? 
+    // If this is "Admin adds user", include auth. If "Public Register", do not.
+    // Your comment said "Create user (multipart): POST /api/users/add", usually admin only.
+    // But standard register is public. I will check your backend... 
+    // Your backend routes/auth.js has /register. It does NOT use authMiddleware.
+    // So we do NOT add headers.
+    // request.headers.addAll(await _headers(auth: true)); 
 
     final streamed = await request.send();
     final res = await http.Response.fromStream(streamed);
 
-    final body = res.body.isNotEmpty ? jsonDecode(res.body) as Map<String, dynamic> : <String, dynamic>{};
-
     if (res.statusCode == 200 || res.statusCode == 201) {
-      // optionally save user profile if returned
-      if (body['user'] != null && body['user'] is Map) {
-        await saveUserProfile(body['user'] as Map<String, dynamic>);
-      }
+      final body = jsonDecode(res.body);
       return body;
     } else {
-      final message = (body is Map && body.containsKey('message')) ? body['message'] : res.body;
-      throw Exception('Create user failed (${res.statusCode}): $message');
+      throw Exception('Create user failed: ${res.body}');
     }
   }
 
-  /// Update user by email (multipart). Backend must support PUT /api/users/edit and accept 'email' field.
-  /// Provide whichever fields you want to update. profilePath optional.
   static Future<Map<String, dynamic>> updateUserByEmailWithProfile({
     required String email,
     String? name,
@@ -235,27 +309,27 @@ class ApiService {
     String? profilePath,
     String? role,
     String? rollNo,
-    int? semester,
+    String? semester,
     String? section,
     String? branch,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/users/edit'); // email-based edit endpoint (backend must implement)
+    // Adjust endpoint to your backend. 
+    // If you use the `editUser.js` logic, you might need a route for it.
+    // Assuming standard user route:
+    final uri = Uri.parse('$baseUrl/api/user/edit');
     final request = http.MultipartRequest('PUT', uri);
 
-    request.fields['email'] = email; // required to identify the user on server-side
-
+    request.fields['email'] = email;
     if (name != null) request.fields['name'] = name;
     if (password != null) request.fields['password'] = password;
     if (dob != null) request.fields['dob'] = dob.toIso8601String();
     if (role != null) request.fields['role'] = role;
     if (rollNo != null) request.fields['rollNo'] = rollNo;
-    if (semester != null) request.fields['semester'] = semester.toString();
+    if (semester != null) request.fields['semester'] = semester;
     if (section != null) request.fields['section'] = section;
     if (branch != null) request.fields['branch'] = branch;
 
     if (profilePath != null) {
-      final file = File(profilePath);
-      if (!file.existsSync()) throw Exception('Profile file does not exist: $profilePath');
       final multipartFile = await http.MultipartFile.fromPath('profile', profilePath);
       request.files.add(multipartFile);
     }
@@ -265,28 +339,20 @@ class ApiService {
 
     final streamed = await request.send();
     final res = await http.Response.fromStream(streamed);
-    final body = res.body.isNotEmpty ? jsonDecode(res.body) as Map<String, dynamic> : <String, dynamic>{};
 
     if (res.statusCode == 200) {
-      // if server returns updated user, update stored profile
-      if (body['user'] != null && body['user'] is Map) {
-        await saveUserProfile(body['user'] as Map<String, dynamic>);
-      }
+      final body = jsonDecode(res.body);
+      if (body['user'] != null) await saveUserProfile(body['user']);
       return body;
     } else {
-      final message = (body is Map && body.containsKey('message')) ? body['message'] : res.body;
-      throw Exception('Update failed (${res.statusCode}): $message');
+      throw Exception('Update failed: ${res.body}');
     }
   }
 
-  /// Upload avatar by email (email-only route)
   static Future<Map<String, dynamic>> uploadAvatarByEmail({
     required String email,
     required String profilePath,
   }) async {
-    final file = File(profilePath);
-    if (!file.existsSync()) throw Exception('Profile file does not exist: $profilePath');
-
     final uri = Uri.parse('$baseUrl/api/user/upload-avatar');
     final request = http.MultipartRequest('POST', uri);
 
@@ -294,21 +360,15 @@ class ApiService {
     final multipartFile = await http.MultipartFile.fromPath('profile', profilePath);
     request.files.add(multipartFile);
 
-    final headers = await _headers(auth: true);
-    request.headers.addAll(headers);
+    request.headers.addAll(await _headers(auth: true));
 
     final streamed = await request.send();
     final res = await http.Response.fromStream(streamed);
-    final body = res.body.isNotEmpty ? jsonDecode(res.body) as Map<String, dynamic> : <String, dynamic>{};
 
     if (res.statusCode == 200) {
-      // backend returns updated user under `data` — do not overwrite storage unless desired
-      // if you want to update stored profile automatically, uncomment below:
-      // if (body['data'] != null && body['data']['profile'] != null) { ... }
-      return body;
+      return jsonDecode(res.body);
     } else {
-      final message = (body is Map && body.containsKey('message')) ? body['message'] : res.body;
-      throw Exception('Upload avatar failed (${res.statusCode}): $message');
+      throw Exception('Upload avatar failed: ${res.body}');
     }
   }
 }

@@ -5,7 +5,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 
 import 'find_teacher_page.dart';
 import 'find_classroom_page.dart';
-import 'timetable_page.dart';
+import 'student_timetable_page.dart';
 import 'main.dart';
 import 'profile_page.dart';
 import 'emptyclassrooms_page_student.dart';
@@ -19,7 +19,7 @@ class StudentHomePage extends StatefulWidget {
   final String? userEmail;
   final String? branch;
   final String? section;
-  final int? semester;
+  final String? semester;
 
   // Matches main.dart
   final String? profile;
@@ -283,7 +283,7 @@ class _HomePageState extends State<StudentHomePage> {
           onPageChanged: (i) => setState(() => _index = i),
           children: [
             _homePage(context),
-            const TimetablePage(embedded: true),
+            const StudentTimetablePage(embedded: true),
             const EventsPage(),
             const EmptyClassroomsPage(),
 

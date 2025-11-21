@@ -1,13 +1,122 @@
-// lib/timetable_model.dart
-class Timetable {
+import 'dart:convert';
+
+// --- COURSE MODEL (For Admin Selection) ---
+class Course {
   final String id;
+  final String courseName;
+  final String courseCode;
+  final String branch;
+  final String semester; // "S5"
+  final String section;
+  final String facultyName;
+  final String color;
+
+  Course({
+    required this.id,
+    required this.courseName,
+    required this.courseCode,
+    required this.branch,
+    required this.semester,
+    required this.section,
+    required this.facultyName,
+    required this.color,
+  });
+
+  factory Course.fromJson(Map<String, dynamic> json) {
+    return Course(
+      id: json['_id'] ?? '',
+      courseName: json['courseName'] ?? '',
+      courseCode: json['courseCode'] ?? '',
+      branch: json['branch'] ?? '',
+      semester: json['semester'] ?? '',
+      section: json['section'] ?? '',
+      facultyName: json['facultyName'] ?? '',
+      color: json['color'] ?? '#FFFFFFFF',
+    );
+  }
+}
+
+// --- TIMETABLE SLOT MODEL ---
+class TimetableSlot {
+  String courseCode;
+  String courseName;
+  String facultyName;
+  String color;
+  String type; // "Theory", "Lab", or ""
+  String room;
+  bool isCancelled;
+  String? newRoom; // Nullable
+  String displayContext; // For teachers (e.g. "CSE S5 A")
+
+  TimetableSlot({
+    this.courseCode = '',
+    this.courseName = '',
+    this.facultyName = '',
+    this.color = '#FFFFFFFF',
+    this.type = '',
+    this.room = '',
+    this.isCancelled = false,
+    this.newRoom,
+    this.displayContext = '',
+  });
+
+  factory TimetableSlot.fromJson(Map<String, dynamic> json) {
+    return TimetableSlot(
+      courseCode: json['courseCode'] ?? '',
+      courseName: json['courseName'] ?? '',
+      facultyName: json['facultyName'] ?? '',
+      color: json['color'] ?? '#FFFFFFFF',
+      type: json['type'] ?? '',
+      room: json['room'] ?? '',
+      isCancelled: json['isCancelled'] ?? false,
+      newRoom: json['newRoom'],
+      displayContext: json['displayContext'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'courseCode': courseCode,
+      'courseName': courseName,
+      'facultyName': facultyName,
+      'color': color,
+      'type': type,
+      'room': room,
+      'isCancelled': isCancelled,
+      'newRoom': newRoom,
+    };
+  }
+}
+
+// --- TIMETABLE DAY MODEL ---
+class TimetableDay {
+  final String dayName;
+  final List<TimetableSlot> slots;
+
+  TimetableDay({required this.dayName, required this.slots});
+
+  factory TimetableDay.fromJson(Map<String, dynamic> json) {
+    var list = json['slots'] as List;
+    List<TimetableSlot> slotsList = list.map((i) => TimetableSlot.fromJson(i)).toList();
+    return TimetableDay(dayName: json['dayName'], slots: slotsList);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'dayName': dayName,
+      'slots': slots.map((e) => e.toJson()).toList(),
+    };
+  }
+}
+
+// --- MAIN TIMETABLE MODEL ---
+class Timetable {
   final String semester;
   final String branch;
   final String section;
-  final List<Day> grid;
+  final List<TimetableDay> grid;
 
   Timetable({
-    required this.id,
     required this.semester,
     required this.branch,
     required this.section,
@@ -15,53 +124,13 @@ class Timetable {
   });
 
   factory Timetable.fromJson(Map<String, dynamic> json) {
-    final gridJson = json['grid'] as List<dynamic>? ?? [];
-    final grid = gridJson.map((d) => Day.fromJson(d as Map<String, dynamic>)).toList();
+    var list = json['grid'] as List;
+    List<TimetableDay> gridList = list.map((i) => TimetableDay.fromJson(i)).toList();
     return Timetable(
-      id: json['_id'] ?? '',
-      semester: json['semester'] ?? '',
+      semester: json['semester']?.toString() ?? '',
       branch: json['branch'] ?? '',
       section: json['section'] ?? '',
-      grid: grid,
-    );
-  }
-}
-
-class Day {
-  final String dayName;
-  final List<Slot> slots;
-  Day({required this.dayName, required this.slots});
-  factory Day.fromJson(Map<String, dynamic> json) {
-    final list = (json['slots'] as List<dynamic>?) ?? [];
-    return Day(dayName: json['dayName'] ?? '', slots: list.map((s) => Slot.fromJson(s as Map<String, dynamic>)).toList());
-  }
-}
-
-class Slot {
-  final String title;
-  final String subtitle;
-  final String color;
-  final String room; // <-- ADDED: Permanent classroom number
-  final int? startSlot;
-  final int? endSlot;
-
-  Slot({
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.room, // <-- ADDED
-    this.startSlot,
-    this.endSlot
-  });
-
-  factory Slot.fromJson(Map<String, dynamic> json) {
-    return Slot(
-      title: (json['title'] ?? '').toString(),
-      subtitle: (json['subtitle'] ?? '').toString(),
-      color: (json['color'] ?? '#FFFFFFFF').toString(),
-      room: (json['room'] ?? '').toString(), // <-- PARSE ROOM
-      startSlot: json['startSlot'] != null ? int.tryParse(json['startSlot'].toString()) : null,
-      endSlot: json['endSlot'] != null ? int.tryParse(json['endSlot'].toString()) : null,
+      grid: gridList,
     );
   }
 }

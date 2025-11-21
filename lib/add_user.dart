@@ -22,7 +22,7 @@ class _AddUserPageState extends State<AddUserPage> {
   String password = '';
   String rollNo = '';
   String branch = '';
-  int? semester;
+  String semester = '';
   String section = '';
   String role = 'student';
   DateTime? dob;
@@ -68,7 +68,7 @@ class _AddUserPageState extends State<AddUserPage> {
         profilePath: _profileFile!.path,
         role: role,
         rollNo: rollNo,
-        semester: semester ?? 0,
+        semester: semester,
         section: section,
         branch: branch,
       );
@@ -168,7 +168,7 @@ class _AddUserPageState extends State<AddUserPage> {
                   child: TextFormField(
                     decoration: const InputDecoration(labelText: 'Semester'),
                     keyboardType: TextInputType.number,
-                    onSaved: (v) => semester = (v == null || v.isEmpty) ? null : int.tryParse(v),
+                    onSaved: (v) => semester = v?.trim() ?? '',
                   ),
                 ),
                 const SizedBox(width: 12),
