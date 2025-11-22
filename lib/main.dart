@@ -10,6 +10,8 @@ import 'staff_homepage.dart';
 import 'student_homepage.dart';
 import 'forgot_password_page.dart';
 
+const maroonColor = Color(0xFFA4123F);
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const RootApp());
