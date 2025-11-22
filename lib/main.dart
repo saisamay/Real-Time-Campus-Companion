@@ -2,6 +2,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'home_page.dart';
 import 'auth_service.dart';
 import 'teacher_homepage.dart';
@@ -12,7 +13,7 @@ import 'forgot_password_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const RootApp());
+  runApp(const RootApp()); // <--- You named it RootApp
 }
 
 class RootApp extends StatefulWidget {
@@ -51,9 +52,7 @@ class _RootAppState extends State<RootApp> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const MaterialApp(
-        home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
 
@@ -78,10 +77,7 @@ class _RootAppState extends State<RootApp> {
       theme: light,
       darkTheme: dark,
       themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
-      home: LoginPage(
-        onToggleTheme: _toggleTheme,
-        isDark: _isDark,
-      ),
+      home: LoginPage(onToggleTheme: _toggleTheme, isDark: _isDark),
     );
   }
 }
@@ -114,22 +110,34 @@ class _LoginPageState extends State<LoginPage> {
       Positioned(
         top: -50,
         left: -50,
-        child: _FloatingOrb(size: 200, color: const Color(0xFFD4AF37).withValues(alpha: 0.1)),
+        child: _FloatingOrb(
+          size: 200,
+          color: const Color(0xFFD4AF37).withValues(alpha: 0.1),
+        ),
       ),
       Positioned(
         top: 100,
         right: -30,
-        child: _FloatingOrb(size: 150, color: const Color(0xFFA4123F).withValues(alpha: 0.2)),
+        child: _FloatingOrb(
+          size: 150,
+          color: const Color(0xFFA4123F).withValues(alpha: 0.2),
+        ),
       ),
       Positioned(
         bottom: -80,
         right: 50,
-        child: _FloatingOrb(size: 250, color: const Color(0xFFD4AF37).withValues(alpha: 0.15)),
+        child: _FloatingOrb(
+          size: 250,
+          color: const Color(0xFFD4AF37).withValues(alpha: 0.15),
+        ),
       ),
       Positioned(
         bottom: 100,
         left: -40,
-        child: _FloatingOrb(size: 180, color: Colors.white.withValues(alpha: 0.05)),
+        child: _FloatingOrb(
+          size: 180,
+          color: Colors.white.withValues(alpha: 0.05),
+        ),
       ),
     ];
   }
@@ -169,8 +177,7 @@ class _LoginPageState extends State<LoginPage> {
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
-
-        }else if (role == 'staff') {
+        } else if (role == 'staff') {
           targetPage = StaffHomePage(
             universityName: "Amrita Vishwa Vidyapeetham — Staff",
             userName: userName,
@@ -178,17 +185,10 @@ class _LoginPageState extends State<LoginPage> {
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
-        }
-        else if (role == 'admin') {
-          targetPage = AdminHomePage(
-            universityName: "Amrita Vishwa Vidyapeetham — Admin",
-            userName: userName,
-            userEmail: userEmail,
-            isDark: widget.isDark,
-            onToggleTheme: widget.onToggleTheme,
-          );
-        }
-        else if (role == 'classrep') {
+        } else if (role == 'admin') {
+          // 💡 FIX: Changed AdminHomePage to AdminApp and removed unnecessary arguments
+          targetPage = const AdminApp();
+        } else if (role == 'classrep') {
           targetPage = HomePage(
             universityName: _getUniversityNameForRole(role),
             userName: userName,
@@ -199,9 +199,8 @@ class _LoginPageState extends State<LoginPage> {
             section: section,
             semester: semester,
           );
-        }
-        else {
-          // All other roles → home_page.dart (for now)
+        } else {
+          // All other roles → student_homepage.dart
           targetPage = StudentHomePage(
             universityName: _getUniversityNameForRole(role),
             userName: userName,
@@ -225,17 +224,17 @@ class _LoginPageState extends State<LoginPage> {
         // Login failed
         final err = res['error'] ?? 'Login failed';
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(err.toString())),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(err.toString())));
         }
       }
     } catch (e) {
       // Error occurred
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -288,7 +287,10 @@ class _LoginPageState extends State<LoginPage> {
               child: Center(
                 child: SingleChildScrollView(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0,
+                      vertical: 40.0,
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -316,11 +318,8 @@ class _LoginPageState extends State<LoginPage> {
                             width: 100,
                             height: 100,
                             fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) => Icon(
-                              Icons.school,
-                              size: 100,
-                              color: goldColor,
-                            ),
+                            errorBuilder: (context, error, stackTrace) =>
+                                Icon(Icons.school, size: 100, color: goldColor),
                           ),
                         ),
 
@@ -394,33 +393,54 @@ class _LoginPageState extends State<LoginPage> {
                                       // Email Field
                                       TextFormField(
                                         controller: _emailController,
-                                        style: const TextStyle(color: Colors.white),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
                                         decoration: InputDecoration(
                                           labelText: "Email",
-                                          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
-                                          prefixIcon: Icon(Icons.email_outlined, color: goldColor),
+                                          labelStyle: TextStyle(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                          ),
+                                          prefixIcon: Icon(
+                                            Icons.email_outlined,
+                                            color: goldColor,
+                                          ),
                                           filled: true,
-                                          fillColor: Colors.white.withValues(alpha: 0.1),
+                                          fillColor: Colors.white.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(15),
+                                            borderRadius: BorderRadius.circular(
+                                              15,
+                                            ),
                                             borderSide: BorderSide.none,
                                           ),
                                           enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(15),
+                                            borderRadius: BorderRadius.circular(
+                                              15,
+                                            ),
                                             borderSide: BorderSide(
-                                              color: Colors.white.withValues(alpha: 0.2),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.2,
+                                              ),
                                               width: 1,
                                             ),
                                           ),
                                           focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(15),
+                                            borderRadius: BorderRadius.circular(
+                                              15,
+                                            ),
                                             borderSide: BorderSide(
                                               color: goldColor,
                                               width: 2,
                                             ),
                                           ),
                                         ),
-                                        validator: (value) => value!.isEmpty ? "Enter email" : null,
+                                        validator: (value) => value!.isEmpty
+                                            ? "Enter email"
+                                            : null,
                                       ),
 
                                       const SizedBox(height: 20),
@@ -429,33 +449,54 @@ class _LoginPageState extends State<LoginPage> {
                                       TextFormField(
                                         controller: _passwordController,
                                         obscureText: true,
-                                        style: const TextStyle(color: Colors.white),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
                                         decoration: InputDecoration(
                                           labelText: "Password",
-                                          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
-                                          prefixIcon: Icon(Icons.lock_outline, color: goldColor),
+                                          labelStyle: TextStyle(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                          ),
+                                          prefixIcon: Icon(
+                                            Icons.lock_outline,
+                                            color: goldColor,
+                                          ),
                                           filled: true,
-                                          fillColor: Colors.white.withValues(alpha: 0.1),
+                                          fillColor: Colors.white.withValues(
+                                            alpha: 0.1,
+                                          ),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(15),
+                                            borderRadius: BorderRadius.circular(
+                                              15,
+                                            ),
                                             borderSide: BorderSide.none,
                                           ),
                                           enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(15),
+                                            borderRadius: BorderRadius.circular(
+                                              15,
+                                            ),
                                             borderSide: BorderSide(
-                                              color: Colors.white.withValues(alpha: 0.2),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.2,
+                                              ),
                                               width: 1,
                                             ),
                                           ),
                                           focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(15),
+                                            borderRadius: BorderRadius.circular(
+                                              15,
+                                            ),
                                             borderSide: BorderSide(
                                               color: goldColor,
                                               width: 2,
                                             ),
                                           ),
                                         ),
-                                        validator: (value) => value!.isEmpty ? "Enter password" : null,
+                                        validator: (value) => value!.isEmpty
+                                            ? "Enter password"
+                                            : null,
                                       ),
 
                                       const SizedBox(height: 30),
@@ -470,16 +511,20 @@ class _LoginPageState extends State<LoginPage> {
                                             backgroundColor: maroonColor,
                                             foregroundColor: Colors.white,
                                             elevation: 8,
-                                            shadowColor: maroonColor.withValues(alpha: 0.5),
+                                            shadowColor: maroonColor.withValues(
+                                              alpha: 0.5,
+                                            ),
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(15),
+                                              borderRadius:
+                                              BorderRadius.circular(15),
                                             ),
                                           ),
                                           child: _loading
                                               ? const SizedBox(
                                             height: 24,
                                             width: 24,
-                                            child: CircularProgressIndicator(
+                                            child:
+                                            CircularProgressIndicator(
                                               color: Colors.white,
                                               strokeWidth: 2.5,
                                             ),
@@ -501,7 +546,10 @@ class _LoginPageState extends State<LoginPage> {
                                         onPressed: () {
                                           Navigator.push(
                                             context,
-                                            MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                              const ForgotPasswordPage(),
+                                            ),
                                           );
                                         },
                                         child: const Text(
@@ -510,11 +558,11 @@ class _LoginPageState extends State<LoginPage> {
                                             color: Colors.white,
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
-                                            decoration: TextDecoration.underline,
+                                            decoration:
+                                            TextDecoration.underline,
                                           ),
                                         ),
                                       ),
-
                                     ],
                                   ),
                                 ),
@@ -546,7 +594,8 @@ class _FloatingOrb extends StatefulWidget {
   State<_FloatingOrb> createState() => _FloatingOrbState();
 }
 
-class _FloatingOrbState extends State<_FloatingOrb> with SingleTickerProviderStateMixin {
+class _FloatingOrbState extends State<_FloatingOrb>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -570,25 +619,27 @@ class _FloatingOrbState extends State<_FloatingOrb> with SingleTickerProviderSta
       animation: _controller,
       builder: (context, child) {
         return Transform.translate(
-          offset: Offset(
-            20 * _controller.value,
-            30 * (1 - _controller.value),
-          ),
+          offset: Offset(20 * _controller.value, 30 * (1 - _controller.value)),
           child: Container(
             width: widget.size,
             height: widget.size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
-                colors: [
-                  widget.color,
-                  widget.color.withValues(alpha: 0),
-                ],
+                colors: [widget.color, widget.color.withValues(alpha: 0)],
               ),
             ),
           ),
         );
       },
     );
+  }
+}
+
+// Placeholder for extension on Color for cleaner code (assuming it exists in your actual project)
+extension on Color {
+  Color withValues({double? alpha}) {
+    if (alpha == null) return this;
+    return this.withOpacity(alpha);
   }
 }

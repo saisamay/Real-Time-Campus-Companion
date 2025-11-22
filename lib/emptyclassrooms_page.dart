@@ -1,16 +1,24 @@
-// lib/classrooms_page.dart
+// lib/emptyclassrooms_page.dart
 import 'package:flutter/material.dart';
 
 class EmptyClassroomsPage extends StatefulWidget {
-  const EmptyClassroomsPage({super.key});
+  final String userBranch;
+  final String userSection;
+
+  const EmptyClassroomsPage({
+    super.key,
+    required this.userBranch,
+    required this.userSection,
+  });
 
   @override
   State<EmptyClassroomsPage> createState() => _ClassroomsPageState();
 }
 
 class _ClassroomsPageState extends State<EmptyClassroomsPage> {
-  // Simple room occupancy tracking (local to this widget)
-  final Map<String, bool?> _roomStatus = {};
+  // Room occupancy tracking with branch and section info
+  // Structure: {roomName: {'occupied': true/false, 'branch': 'CSE', 'section': 'A'}}
+  final Map<String, Map<String, dynamic>> _roomStatus = {};
 
   // Filters for this page (local)
   String _filterType = 'Class';
@@ -51,6 +59,15 @@ class _ClassroomsPageState extends State<EmptyClassroomsPage> {
   }
 
   void _showOccupancySheet(BuildContext ctx, String roomName) {
+    final currentStatus = _roomStatus[roomName];
+    final isOccupied = currentStatus?['occupied'] == true;
+    final occupiedBy = currentStatus != null && isOccupied
+        ? '${currentStatus['branch']} - ${currentStatus['section']}'
+        : null;
+    
+    // Check if room is available (not occupied or unknown status)
+    final isAvailable = currentStatus == null || currentStatus['occupied'] == false;
+
     showModalBottomSheet(
       context: ctx,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -66,31 +83,132 @@ class _ClassroomsPageState extends State<EmptyClassroomsPage> {
               ),
             ),
             const SizedBox(height: 16),
-            Text(roomName, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            const SizedBox(height: 16),
-            Row(children: [
-              Expanded(
-                child: FilledButton.tonal(
-                  onPressed: () {
-                    setState(() => _roomStatus[roomName] = true);
-                    Navigator.pop(bCtx);
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Marked as Occupied')));
-                  },
-                  child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Occupied', textAlign: TextAlign.center)),
+            Text(roomName, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+            const SizedBox(height: 8),
+            
+            // Show current status
+            if (isOccupied && occupiedBy != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(bCtx).colorScheme.errorContainer.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Theme.of(bCtx).colorScheme.error, width: 1),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock, color: Theme.of(bCtx).colorScheme.error, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Occupied by: $occupiedBy',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(bCtx).colorScheme.error,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () {
-                    setState(() => _roomStatus[roomName] = false);
-                    Navigator.pop(bCtx);
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Marked as Not occupied')));
-                  },
-                  child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Not occupied', textAlign: TextAlign.center)),
+            ] else if (isAvailable) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(bCtx).colorScheme.primaryContainer.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Theme.of(bCtx).colorScheme.primary, width: 1),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, color: Theme.of(bCtx).colorScheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Available',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(bCtx).colorScheme.primary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ]),
+            ],
+            
+            const SizedBox(height: 20),
+            
+            // Show occupy button only for available rooms
+            if (isAvailable) ...[
+              FilledButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _roomStatus[roomName] = {
+                      'occupied': true,
+                      'branch': widget.userBranch,
+                      'section': widget.userSection,
+                    };
+                  });
+                  Navigator.pop(bCtx);
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(
+                      content: Text('✓ Room occupied by ${widget.userBranch} - ${widget.userSection}'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.meeting_room),
+                label: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Text('Occupy This Room', style: TextStyle(fontSize: 16)),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(bCtx).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(bCtx),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Text('Cancel', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+            ] else ...[
+              // If occupied, show option to mark as available
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _roomStatus[roomName] = {
+                      'occupied': false,
+                      'branch': null,
+                      'section': null,
+                    };
+                  });
+                  Navigator.pop(bCtx);
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(
+                      content: Text('✓ Room marked as available'),
+                      backgroundColor: Colors.blue,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.lock_open),
+                label: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Text('Mark as Available', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(bCtx),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Text('Close', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+            ],
           ]),
         );
       },
@@ -103,18 +221,21 @@ class _ClassroomsPageState extends State<EmptyClassroomsPage> {
     String label;
     Color bg;
     Color fg;
-    if (status == true) {
-      label = 'Occupied';
-      bg = cs.errorContainer;
-      fg = cs.onErrorContainer;
-    } else if (status == false) {
-      label = 'Not occupied';
-      bg = cs.primaryContainer;
-      fg = cs.onPrimaryContainer;
-    } else {
+    
+    if (status == null) {
       label = 'Unknown';
       bg = cs.surfaceVariant;
       fg = cs.onSurfaceVariant;
+    } else if (status['occupied'] == true) {
+      final branch = status['branch'] ?? '';
+      final section = status['section'] ?? '';
+      label = '$branch-$section';
+      bg = cs.errorContainer;
+      fg = cs.onErrorContainer;
+    } else {
+      label = 'Available';
+      bg = cs.primaryContainer;
+      fg = cs.onPrimaryContainer;
     }
 
     return Container(
@@ -124,7 +245,7 @@ class _ClassroomsPageState extends State<EmptyClassroomsPage> {
         borderRadius: BorderRadius.circular(999),
         boxShadow: [BoxShadow(blurRadius: 8, offset: const Offset(0, 2), color: Colors.black.withOpacity(.15))],
       ),
-      child: Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: fg)),
+      child: Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: fg, fontSize: 11)),
     );
   }
 

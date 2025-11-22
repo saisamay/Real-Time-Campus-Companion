@@ -262,7 +262,10 @@ class _HomePageState extends State<HomePage> {
         _homePage(context), // 0 - Home Dashboard
         const TimetablePage(embedded: true), // 1 - Timetable
         const EventsPage(), // 2 - Events page (external)
-        const EmptyClassroomsPage(), // 3 - External Classrooms
+        EmptyClassroomsPage(
+          userBranch: selectedDept,
+          userSection: selectedSection,
+        ), // 3 - External Classrooms with branch and section
         ProfilePage(
           userName: userName,
           userEmail: userEmail,

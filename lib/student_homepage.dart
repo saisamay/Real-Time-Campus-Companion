@@ -1,15 +1,15 @@
-// lib/home_page.dart
+// lib/student_homepage.dart
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-
 import 'find_teacher_page.dart';
 import 'find_classroom_page.dart';
 import 'timetable_page.dart';
-import 'main.dart'; // for LoginPage navigation
+import 'main.dart';
 import 'profile_page.dart';
 import 'emptyclassrooms_page_student.dart';
-import 'Events_page.dart'; // note: file name lowercased and matches EventsPage class
+import 'Events_page.dart';
 
+// Student Home Page Class
 class StudentHomePage extends StatefulWidget {
   final String universityName;
   final bool isDark;
@@ -18,13 +18,13 @@ class StudentHomePage extends StatefulWidget {
   final String? userEmail;
   final String? branch;
   final String? section;
-  final int? semester;
+  final String? semester; // Changed from int? to String?
 
   const StudentHomePage({
     super.key,
     required this.universityName,
-    this.isDark = false, // default
-    this.onToggleTheme, // optional
+    this.isDark = false,
+    this.onToggleTheme,
     this.userName,
     this.userEmail,
     this.branch,
@@ -33,23 +33,19 @@ class StudentHomePage extends StatefulWidget {
   });
 
   @override
-  State<StudentHomePage> createState() => _HomePageState();
+  State<StudentHomePage> createState() => _StudentHomePageState();
 }
 
-class _HomePageState extends State<StudentHomePage> {
+class _StudentHomePageState extends State<StudentHomePage> {
   int _index = 0;
   late PageController _pageController;
-
-  // single set of selected values (initialized in initState)
   late String selectedDept;
   late String selectedSection;
-  late int selectedSemester;
-
-  // User state
+  late String selectedSemester; // Changed from int to String
   late String userName;
   late String userEmail;
+  late bool _isDark; // Local state for theme
 
-  // Images for Home Page Carousel
   final List<String> eventImages = const [
     'https://picsum.photos/1200/600?random=1',
     'https://picsum.photos/1200/600?random=2',
@@ -72,14 +68,13 @@ class _HomePageState extends State<StudentHomePage> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _index);
-
-    // initialize from widget, with sensible defaults
     selectedDept = (widget.branch ?? 'EEE').toUpperCase();
     selectedSection = (widget.section ?? 'A').toUpperCase();
-    selectedSemester = (widget.semester ?? 5);
-
+    selectedSemester =
+        (widget.semester ?? '5'); // Changed default from 5 to '5'
     userName = widget.userName ?? 'Student Name';
     userEmail = widget.userEmail ?? 'student@university.edu';
+    _isDark = widget.isDark; // Initialize local theme state
   }
 
   @override
@@ -90,24 +85,29 @@ class _HomePageState extends State<StudentHomePage> {
 
   void _goToPage(int index) {
     setState(() => _index = index);
-    _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
-  // Allow ProfilePage to update name/email
   void _updateUserName(String name) => setState(() => userName = name);
   void _updateUserEmail(String email) => setState(() => userEmail = email);
+  void _updateTheme(bool isDark) => setState(() => _isDark = isDark);
 
-  // ---------- HOME PAGE CONTENT ----------
   Widget _homePage(BuildContext context) {
-    final imagesForPreview = timetableData[selectedDept]?[selectedSection] ?? <String>[];
-    final previewImage = imagesForPreview.isNotEmpty ? imagesForPreview.first : null;
+    final imagesForPreview =
+        timetableData[selectedDept]?[selectedSection] ?? <String>[];
+    final previewImage = imagesForPreview.isNotEmpty
+        ? imagesForPreview.first
+        : null;
     final scheme = Theme.of(context).colorScheme;
 
     return ListView(
       padding: EdgeInsets.zero,
       children: [
         const SizedBox(height: 16),
-        // Events carousel
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: ClipRRect(
@@ -121,39 +121,52 @@ class _HomePageState extends State<StudentHomePage> {
                 autoPlayInterval: const Duration(seconds: 3),
               ),
               items: eventImages.map((url) {
-                return Image.network(url, fit: BoxFit.cover, width: double.infinity);
+                return Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                );
               }).toList(),
             ),
           ),
         ),
-
         const SizedBox(height: 16),
-
-        // Timetable preview card
         if (previewImage != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Card(
               elevation: 3,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               clipBehavior: Clip.antiAlias,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: 220, width: double.infinity, child: Image.network(previewImage, fit: BoxFit.cover)),
+                  SizedBox(
+                    height: 220,
+                    width: double.infinity,
+                    child: Image.network(previewImage, fit: BoxFit.cover),
+                  ),
                   Padding(
                     padding: const EdgeInsets.all(12),
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: scheme.primaryContainer,
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             '$selectedDept - $selectedSection',
-                            style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onPrimaryContainer),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onPrimaryContainer,
+                            ),
                           ),
                         ),
                         const Spacer(),
@@ -169,12 +182,13 @@ class _HomePageState extends State<StudentHomePage> {
               ),
             ),
           ),
-
         const SizedBox(height: 20),
-
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Text("Announcements", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          child: Text(
+            "Announcements",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
         ),
         const ListTile(
           leading: Icon(Icons.campaign),
@@ -191,89 +205,160 @@ class _HomePageState extends State<StudentHomePage> {
     );
   }
 
-  // ---------- BUILD METHOD ----------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.universityName),
-        leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
+        ),
         actions: [
-          IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(context)),
+          // Theme Toggle Button - Works continuously every time
+          IconButton(
+            key: ValueKey('theme_toggle_$_isDark'), // Use local state
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (child, animation) {
+                return RotationTransition(turns: animation, child: child);
+              },
+              child: Icon(
+                _isDark
+                    ? Icons.wb_sunny
+                    : Icons
+                          .nightlight_round, // Fixed: sun in dark mode, moon in light mode
+                key: ValueKey(_isDark),
+              ),
+            ),
+            onPressed: () {
+              setState(() {
+                _isDark = !_isDark; // Toggle local state
+              });
+              if (widget.onToggleTheme != null) {
+                widget.onToggleTheme!(_isDark); // Notify parent
+              }
+            },
+            tooltip: _isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+          ),
           const SizedBox(width: 8),
         ],
       ),
-
       drawer: Drawer(
-        child: ListView(padding: EdgeInsets.zero, children: [
-          UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(color: Color(0xFFA4123F)),
-            currentAccountPicture: const CircleAvatar(backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3")),
-            accountName: Text(userName),
-            accountEmail: Text(userEmail),
-          ),
-          ListTile(leading: const Icon(Icons.home), title: const Text("Home"), onTap: () {
-            Navigator.pop(context);
-            _goToPage(0);
-          }),
-          ListTile(leading: const Icon(Icons.person_search), title: const Text('Find Teacher (Cabin/Room)'), onTap: () {
-            Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const FindTeacherPage()));
-          }),
-          ListTile(leading: const Icon(Icons.search), title: const Text("Find Friend Class Room"), onTap: () {
-            Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const FindClassRoomPage()));
-          }),
-          ListTile(leading: const Icon(Icons.schedule), title: const Text("Timetable"), onTap: () {
-            Navigator.pop(context);
-            _goToPage(1);
-          }),
-          ListTile(leading: const Icon(Icons.event), title: const Text("Events"), onTap: () {
-            Navigator.pop(context);
-            _goToPage(2);
-          }),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text("Settings"),
-            onTap: () {
-              Navigator.pop(context); // close the drawer
-              _goToPage(4);          // show Profile page (same as tapping the Profile nav)
-            },
-          ),
-          ListTile(leading: const Icon(Icons.logout), title: const Text("Logout"), onTap: () {
-            Navigator.pop(context);
-            // navigate to LoginPage
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder: (_) => LoginPage(
-                  isDark: widget.isDark,
-                  onToggleTheme: widget.onToggleTheme ?? (bool v) {},
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            UserAccountsDrawerHeader(
+              decoration: const BoxDecoration(color: Color(0xFFA4123F)),
+              currentAccountPicture: const CircleAvatar(
+                backgroundImage: NetworkImage(
+                  "https://i.pravatar.cc/150?img=3",
                 ),
               ),
+              accountName: Text(userName),
+              accountEmail: Text(userEmail),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text("Home"),
+              onTap: () {
+                Navigator.pop(context);
+                _goToPage(0);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_search),
+              title: const Text('Find Teacher (Cabin/Room)'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FindTeacherPage()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.search),
+              title: const Text("Find Friend Class Room"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FindClassRoomPage()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.schedule),
+              title: const Text("Timetable"),
+              onTap: () {
+                Navigator.pop(context);
+                _goToPage(1);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.event),
+              title: const Text("Events"),
+              onTap: () {
+                Navigator.pop(context);
+                _goToPage(2);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text("Settings"),
+              onTap: () {
+                Navigator.pop(context);
+                _goToPage(4);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text("Logout"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LoginPage(
+                      isDark: _isDark, // Use local state
+                      onToggleTheme: widget.onToggleTheme ?? (bool v) {},
+                    ),
+                  ),
                   (Route<dynamic> route) => false,
-            );
-          }),
-        ]),
+                );
+              },
+            ),
+          ],
+        ),
       ),
-
-      body: PageView(controller: _pageController, onPageChanged: (i) => setState(() => _index = i), children: [
-        _homePage(context), // 0 - Home Dashboard
-        const TimetablePage(embedded: true), // 1 - Timetable
-        const EventsPage(), // 2 - Events page (external)
-        const EmptyClassroomsPage(), // 3 - External Classrooms
-        ProfilePage(
-          userName: userName,
-          userEmail: userEmail,
-          dept: selectedDept,
-          section: selectedSection,
-          isDark: widget.isDark,
-          onToggleTheme: widget.onToggleTheme,
-          onUpdateName: _updateUserName,
-          onUpdateEmail: _updateUserEmail,
-        ), // 4 - Profile
-      ]),
-
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (i) => setState(() => _index = i),
+        children: [
+          _homePage(context),
+          const TimetablePage(embedded: true),
+          const EventsPage(),
+          const EmptyClassroomsPage(),
+          ProfilePage(
+            userName: userName,
+            userEmail: userEmail,
+            dept: selectedDept,
+            section: selectedSection,
+            isDark: _isDark, // Use local state
+            onToggleTheme: (bool isDark) {
+              setState(() => _isDark = isDark);
+              if (widget.onToggleTheme != null) {
+                widget.onToggleTheme!(isDark);
+              }
+            },
+            onUpdateName: _updateUserName,
+            onUpdateEmail: _updateUserEmail,
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: _goToPage,
@@ -281,31 +366,13 @@ class _HomePageState extends State<StudentHomePage> {
           NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
           NavigationDestination(icon: Icon(Icons.schedule), label: 'Timetable'),
           NavigationDestination(icon: Icon(Icons.event), label: 'Events'),
-          NavigationDestination(icon: Icon(Icons.meeting_room), label: 'Classrooms'),
+          NavigationDestination(
+            icon: Icon(Icons.meeting_room),
+            label: 'Classrooms',
+          ),
           NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
-    );
-  }
-
-  void _openQuickSearch(BuildContext ctx) {
-    showModalBottomSheet(
-      context: ctx,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (bCtx) {
-        return Padding(
-          padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(bCtx).viewInsets.bottom + 16),
-          child: TextField(
-            autofocus: true,
-            decoration: const InputDecoration(hintText: 'Search anything…', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
-            onSubmitted: (q) {
-              Navigator.pop(bCtx);
-              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Searching for: $q')));
-            },
-          ),
-        );
-      },
     );
   }
 }
