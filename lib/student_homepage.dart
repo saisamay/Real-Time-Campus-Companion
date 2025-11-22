@@ -1,16 +1,17 @@
+// lib/student_homepage.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 
 import 'find_teacher_page.dart';
 import 'find_classroom_page.dart';
-import 'student_timetable_page.dart'; // ✅ Using the smart timetable page
+import 'student_timetable_page.dart';
 import 'main.dart';
 import 'profile_page.dart';
 import 'emptyclassrooms_page_student.dart';
 import 'Events_page.dart';
 
-class HomePage extends StatefulWidget {
+class StudentHomePage extends StatefulWidget {
   final String universityName;
   final bool isDark;
   final ValueChanged<bool>? onToggleTheme;
@@ -18,13 +19,12 @@ class HomePage extends StatefulWidget {
   final String? userEmail;
   final String? branch;
   final String? section;
-
-  // ✅ FIXED: Changed int to String to match backend "S5"
   final String? semester;
 
+  // Matches main.dart
   final String? profile;
 
-  const HomePage({
+  const StudentHomePage({
     super.key,
     required this.universityName,
     this.isDark = false,
@@ -38,19 +38,18 @@ class HomePage extends StatefulWidget {
   });
 
   @override
-  State<HomePage> createState() => _CrHomePageState();
+  State<StudentHomePage> createState() => _HomePageState();
 }
 
-class _CrHomePageState extends State<HomePage> {
+class _HomePageState extends State<StudentHomePage> {
   int _index = 0;
   late PageController _pageController;
 
   // selections
   late String selectedBranch;
   late String selectedSection;
-  late String selectedSemester;
 
-  // User state
+  // user info
   late String userName;
   late String userEmail;
 
@@ -61,7 +60,6 @@ class _CrHomePageState extends State<HomePage> {
     'https://picsum.photos/1200/600?random=3',
   ];
 
-  // Timetable Preview Data
   final Map<String, Map<String, List<String>>> timetableData = {
     'EEE': {
       'N302': [
@@ -79,14 +77,11 @@ class _CrHomePageState extends State<HomePage> {
     super.initState();
     _pageController = PageController(initialPage: _index);
 
-    // Initialize from widget
     selectedBranch = (widget.branch ?? 'EEE').toUpperCase();
     selectedSection = (widget.section ?? 'A').toUpperCase();
-    // ✅ Handle String semester
-    selectedSemester = widget.semester ?? 'S5';
 
-    userName = widget.userName ?? 'Class Rep';
-    userEmail = widget.userEmail ?? 'cr@university.edu';
+    userName = widget.userName ?? 'Student Name';
+    userEmail = widget.userEmail ?? 'student@university.edu';
   }
 
   @override
@@ -105,27 +100,27 @@ class _CrHomePageState extends State<HomePage> {
   }
 
   // ✅ HELPER: Logic to decide if image is Network, File, or Asset
-  ImageProvider _getProfileProvider() {
-    final String? path = widget.profile;
+  ImageProvider? _getSafeImageProvider(String? path) {
+    if (path == null || path.trim().isEmpty) return null;
 
-    if (path == null || path.isEmpty) {
-      return const AssetImage('assets/default_avatar.png');
+    final trimmed = path.trim();
+
+    // 1. Network Image
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return NetworkImage(trimmed);
     }
 
-    if (path.startsWith('http')) {
-      return NetworkImage(path);
-    }
-
+    // 2. Local File
     try {
-      final file = File(path);
+      final file = File(trimmed);
       if (file.existsSync()) {
         return FileImage(file);
       }
     } catch (e) {
-      // Ignore error
+      // Ignore errors, return null
     }
 
-    return const AssetImage('assets/default_avatar.png');
+    return null;
   }
 
   // ---------- HOME PAGE CONTENT ----------
@@ -138,40 +133,13 @@ class _CrHomePageState extends State<HomePage> {
       padding: EdgeInsets.zero,
       children: [
         const SizedBox(height: 16),
-
-        // ✅ Added CR Banner
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF6A3F8A), Color(0xFF8A63D2)]),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.admin_panel_settings, color: Colors.white, size: 30),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Class Representative", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text("You can manage timetable slots.", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Events carousel
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: CarouselSlider(
               options: CarouselOptions(
-                height: 180,
+                height: 200,
                 autoPlay: true,
                 enlargeCenterPage: true,
                 viewportFraction: 0.95,
@@ -183,10 +151,7 @@ class _CrHomePageState extends State<HomePage> {
             ),
           ),
         ),
-
         const SizedBox(height: 16),
-
-        // Timetable preview card
         if (previewImage != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -197,7 +162,7 @@ class _CrHomePageState extends State<HomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: 200, width: double.infinity, child: Image.network(previewImage, fit: BoxFit.cover)),
+                  SizedBox(height: 220, width: double.infinity, child: Image.network(previewImage, fit: BoxFit.cover)),
                   Padding(
                     padding: const EdgeInsets.all(12),
                     child: Row(
@@ -216,8 +181,8 @@ class _CrHomePageState extends State<HomePage> {
                         const Spacer(),
                         TextButton.icon(
                           onPressed: () => _goToPage(1),
-                          icon: const Icon(Icons.edit_calendar), // CR specific icon
-                          label: const Text('Manage Timetable'),
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('View Timetable'),
                         ),
                       ],
                     ),
@@ -226,9 +191,7 @@ class _CrHomePageState extends State<HomePage> {
               ),
             ),
           ),
-
         const SizedBox(height: 20),
-
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
           child: Text("Announcements", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -243,26 +206,31 @@ class _CrHomePageState extends State<HomePage> {
     );
   }
 
-  // ---------- BUILD METHOD ----------
   @override
   Widget build(BuildContext context) {
+    // Calculate provider once for usage in Drawer
+    final drawerImageProvider = _getSafeImageProvider(widget.profile);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text("${widget.universityName} (CR)"), // Show CR in title
+        title: Text(widget.universityName),
         leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
         actions: [
           IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(context)),
           const SizedBox(width: 8),
         ],
       ),
-
       drawer: Drawer(
         child: ListView(padding: EdgeInsets.zero, children: [
           UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(color: Colors.deepPurple), // Distinct color for CR
+            decoration: const BoxDecoration(color: Color(0xFFA4123F)),
+            // ✅ FIXED: Using _getSafeImageProvider with fallback child logic
             currentAccountPicture: CircleAvatar(
-              backgroundImage: _getProfileProvider(),
+              backgroundImage: drawerImageProvider,
               backgroundColor: Colors.white24,
+              child: drawerImageProvider == null
+                  ? const Icon(Icons.person, size: 40, color: Colors.white)
+                  : null,
             ),
             accountName: Text(userName),
             accountEmail: Text(userEmail),
@@ -271,18 +239,21 @@ class _CrHomePageState extends State<HomePage> {
             Navigator.pop(context);
             _goToPage(0);
           }),
-          // CR Specific Label
-          ListTile(leading: const Icon(Icons.edit_calendar), title: const Text("Manage Timetable"), onTap: () {
+          ListTile(leading: const Icon(Icons.person_search), title: const Text('Find Teacher (Cabin/Room)'), onTap: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const FindTeacherPage()));
+          }),
+          ListTile(leading: const Icon(Icons.search), title: const Text("Find Friend Class Room"), onTap: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const FindClassRoomPage()));
+          }),
+          ListTile(leading: const Icon(Icons.schedule), title: const Text("Timetable"), onTap: () {
             Navigator.pop(context);
             _goToPage(1);
           }),
           ListTile(leading: const Icon(Icons.event), title: const Text("Events"), onTap: () {
             Navigator.pop(context);
             _goToPage(2);
-          }),
-          ListTile(leading: const Icon(Icons.person_search), title: const Text('Find Teacher'), onTap: () {
-            Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const FindTeacherPage()));
           }),
           ListTile(
             leading: const Icon(Icons.settings),
@@ -292,7 +263,6 @@ class _CrHomePageState extends State<HomePage> {
               _goToPage(4);
             },
           ),
-
           ListTile(leading: const Icon(Icons.logout), title: const Text("Logout"), onTap: () {
             Navigator.pop(context);
             Navigator.pushAndRemoveUntil(
@@ -308,36 +278,32 @@ class _CrHomePageState extends State<HomePage> {
           }),
         ]),
       ),
-
       body: PageView(
           controller: _pageController,
           onPageChanged: (i) => setState(() => _index = i),
           children: [
             _homePage(context),
-
-            // ✅ THIS IS THE KEY: Using StudentTimetablePage
-            // It will detect 'classrep' role and show Edit buttons automatically
             const StudentTimetablePage(embedded: true),
-
             const EventsPage(),
             const EmptyClassroomsPage(),
 
+            // ✅ ProfilePage integration
             ProfilePage(
               userName: userName,
               userEmail: userEmail,
               dept: selectedBranch,
               section: selectedSection,
               isDark: widget.isDark,
-              onToggleTheme: widget.onToggleTheme ?? (_) {},
-              initialPhotoUrl: widget.profile ?? '',
+              onToggleTheme: widget.onToggleTheme,
+              initialPhotoUrl: widget.profile,
             ),
           ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: _goToPage,
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.edit_calendar), label: 'Timetable'), // Distinct icon
+          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.schedule), label: 'Timetable'),
           NavigationDestination(icon: Icon(Icons.event), label: 'Events'),
           NavigationDestination(icon: Icon(Icons.meeting_room), label: 'Classrooms'),
           NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
