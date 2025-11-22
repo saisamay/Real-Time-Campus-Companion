@@ -1,38 +1,85 @@
-// lib/staff_homepage.dart
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'main.dart';
-import 'profile_page.dart';
-// for LoginPage navigation
 
-class StaffHomePage extends StatefulWidget {
+void main() {
+  runApp(const MyApp());
+}
+
+// Helper: header/profile gradient colors (same source for both areas)
+List<Color> headerGradientColors(bool isDark) {
+  // dark: grey -> black; light: your original mint/teal gradient
+  return isDark
+      ? [const Color(0xFF2D2D2D), const Color(0xFF0B0B0B)]
+      : [const Color(0xFF06B6D4), const Color(0xFF06D6A0)];
+}
+
+// ----------------------- APP -----------------------
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _isDark = false;
+
+  void _toggleTheme(bool value) => setState(() => _isDark = value);
+
+  @override
+  Widget build(BuildContext context) {
+    final light = ThemeData(
+      colorScheme:
+      ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), brightness: Brightness.light),
+      useMaterial3: true,
+      appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
+      navigationBarTheme: const NavigationBarThemeData(height: 70, elevation: 2),
+    );
+
+    final dark = ThemeData(
+      colorScheme:
+      ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), brightness: Brightness.dark),
+      useMaterial3: true,
+      appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
+      navigationBarTheme: const NavigationBarThemeData(height: 70, elevation: 2),
+    );
+
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'University (Teachers)',
+      theme: light,
+      darkTheme: dark,
+      themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
+      home: TeachersHome(
+        universityName: 'Your University Name',
+        isDark: _isDark,
+        onToggleTheme: _toggleTheme,
+      ),
+    );
+  }
+}
+
+// ----------------------- TEACHERS HOME -----------------------
+class TeachersHome extends StatefulWidget {
   final String universityName;
   final bool isDark;
   final ValueChanged<bool> onToggleTheme;
-  final String userName;
-  final String userEmail;
-
-  const StaffHomePage({
-    super.key,
-    required this.universityName,
-    required this.isDark,
-    required this.onToggleTheme,
-    required this.userName,
-    required this.userEmail,
-  });
+  const TeachersHome({super.key, required this.universityName, required this.isDark, required this.onToggleTheme});
 
   @override
-  State<StaffHomePage> createState() => _StaffHomePageState();
+  State<TeachersHome> createState() => _TeachersHomeState();
 }
 
-class _StaffHomePageState extends State<StaffHomePage> {
+class _TeachersHomeState extends State<TeachersHome> {
   int _index = 0;
   late PageController _pageController;
 
-  // Profile info — initialized from widget values
-  late String staffName;
-  late String staffEmail;
-  String department = 'Administration';
-  String office = 'Block B - 102';
+  // Profile info
+  String teacherName = 'Admin';
+  String teacherEmail = 'admin@university.edu';
+  String department = 'Admin';
+   String cabin = 'Block A ';
 
   // simple in-memory password (for demo)
   String _password = 'password123';
@@ -41,8 +88,6 @@ class _StaffHomePageState extends State<StaffHomePage> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _index);
-    staffName = widget.userName;
-    staffEmail = widget.userEmail;
   }
 
   @override
@@ -58,169 +103,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
     });
   }
 
-  void _openQuickSearch(BuildContext ctx) {
-    showModalBottomSheet(
-      context: ctx,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (bCtx) => Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(bCtx).viewInsets.bottom + 16),
-        child: TextField(
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Search anything…', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
-          onSubmitted: (q) {
-            Navigator.pop(bCtx);
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Searching for: $q')));
-          },
-        ),
-      ),
-    );
-  }
-
-  // ---------- UI ----------
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.universityName),
-        leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
-        actions: [
-          IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(context)),
-          const SizedBox(width: 8),
-        ],
-      ),
-      drawer: Drawer(
-        child: ListView(
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: scheme.primary),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const CircleAvatar(radius: 28, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=11")),
-                const SizedBox(height: 12),
-                Text(staffName, style: TextStyle(color: scheme.onPrimary, fontSize: 18)),
-                Text(staffEmail, style: TextStyle(color: scheme.onPrimary.withOpacity(.8), fontSize: 14)),
-              ]),
-            ),
-            ListTile(leading: const Icon(Icons.home), title: const Text('Home'), onTap: () {
-              Navigator.pop(context);
-              _goToPage(0);
-            }),
-            ListTile(leading: const Icon(Icons.person), title: const Text('Profile'), onTap: () {
-              Navigator.pop(context);
-              _goToPage(1);
-            }),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Logout'),
-              onTap: () {
-                // close drawer then navigate to LoginPage (clear stack)
-                Navigator.pop(context);
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(
-                    builder: (_) => LoginPage(
-                      isDark: widget.isDark,
-                      onToggleTheme: widget.onToggleTheme,
-                    ),
-                  ),
-                      (route) => false,
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (i) => setState(() => _index = i),
-        children: [
-          const ClassroomsPage(),
-          _profilePage(context),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _goToPage,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
-        ],
-      ),
-    );
-  }
-
-  Widget _profilePage(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return ListView(
-      children: [
-        Container(
-          height: 180,
-          decoration: BoxDecoration(gradient: LinearGradient(colors: [cs.primary, cs.secondary], begin: Alignment.topLeft, end: Alignment.bottomRight)),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(children: [
-                const CircleAvatar(radius: 40, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=11")),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(staffName, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w800, fontSize: 20)),
-                    const SizedBox(height: 6),
-                    Text(staffEmail, style: TextStyle(color: cs.onPrimary.withOpacity(.9))),
-                    const SizedBox(height: 6),
-                    Text('$department • $office', style: TextStyle(color: cs.onPrimary.withOpacity(.9))),
-                  ]),
-                ),
-              ]),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Wrap(spacing: 12, runSpacing: 12, children: [
-            _actionTile(context,
-              icon: Icons.edit,
-              label: 'Edit Name',
-              onTap: () async {
-                final ctrl = TextEditingController(text: staffName);
-                await showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('Edit Name'),
-                    content: TextField(controller: ctrl, decoration: const InputDecoration(border: OutlineInputBorder())),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                      FilledButton(onPressed: () {
-                        setState(() => staffName = ctrl.text.trim().isNotEmpty ? ctrl.text.trim() : staffName);
-                        Navigator.pop(context);
-                      }, child: const Text('Save')),
-                    ],
-                  ),
-                );
-              },
-            ),
-            _actionTile(context,
-              icon: widget.isDark ? Icons.light_mode : Icons.dark_mode,
-              label: widget.isDark ? 'Light Mode' : 'Dark Mode',
-              onTap: () => widget.onToggleTheme(!widget.isDark),
-            ),
-            _actionTile(context,
-              icon: Icons.lock,
-              label: 'Change Password',
-              onTap: () async {
-                await _showChangePasswordDialog(context);
-              },
-            ),
-          ]),
-        ),
-      ],
-    );
-  }
-
+  // keep existing change password dialog — reused by ProfilePage callback
   Future<void> _showChangePasswordDialog(BuildContext ctx) async {
     final cur = TextEditingController();
     final nw = TextEditingController();
@@ -264,22 +147,835 @@ class _StaffHomePageState extends State<StaffHomePage> {
     );
   }
 
-  Widget _actionTile(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: (MediaQuery.of(context).size.width - 12 * 3) / 2,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(blurRadius: 8, color: Colors.black.withOpacity(0.06), offset: const Offset(0, 3))]),
-        child: Row(children: [Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: cs.onPrimaryContainer)), const SizedBox(width: 12), Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700))), const Icon(Icons.chevron_right)]),
+  // ---------- UI ----------
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      // AppBar: gradient header + theme toggle (replaced search)
+      appBar: AppBar(
+        title: Text(widget.universityName),
+        leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
+        actions: [
+          // Theme toggle button in header (shows current mode and toggles)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: IconButton(
+              tooltip: widget.isDark ? 'Switch to light' : 'Switch to dark',
+              icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
+              onPressed: () => widget.onToggleTheme(!widget.isDark),
+            ),
+          ),
+        ],
+        // add gradient colors to the app bar header (use helper)
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: headerGradientColors(widget.isDark),
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+      ),
+      drawer: Drawer(
+        child: ListView(
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(color: scheme.primary),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const CircleAvatar(radius: 28, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=5")),
+                const SizedBox(height: 12),
+                Text(teacherName, style: TextStyle(color: scheme.onPrimary, fontSize: 18)),
+                Text(teacherEmail, style: TextStyle(color: scheme.onPrimary.withOpacity(.8), fontSize: 14)),
+              ]),
+            ),
+            ListTile(leading: const Icon(Icons.home), title: const Text('Home'), onTap: () {
+              Navigator.pop(context);
+              _goToPage(0);
+            }),
+            ListTile(leading: const Icon(Icons.person), title: const Text('Profile'), onTap: () {
+              Navigator.pop(context);
+              _goToPage(1);
+            }),
+          ],
+        ),
+      ),
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (i) => setState(() => _index = i),
+        children: [
+          const ClassroomsPage(),
+          // ---------- use ProfilePage here, wired to existing state ----------
+          ProfilePage(
+            userName: teacherName,
+            userEmail: teacherEmail,
+            dept: department,
+            section: cabin,
+            isDark: widget.isDark,
+            onToggleTheme: (v) => widget.onToggleTheme(v),
+            onUpdateName: (newName) => setState(() => teacherName = newName),
+            onUpdateEmail: (newEmail) => setState(() => teacherEmail = newEmail),
+            initialPhotoUrl: null,
+            onChangePhoto: () {
+              // keep photo handling visual — you can replace with image picker
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Change photo tapped')));
+            },
+            onChangePassword: () => _showChangePasswordDialog(context),
+            onLogout: () {
+              showDialog(
+                context: context,
+                builder: (dCtx) => AlertDialog(
+                  title: const Text('Log Out'),
+                  content: const Text('Are you sure you want to log out?'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
+                    FilledButton(onPressed: () {
+                      Navigator.pop(dCtx);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signed out')));
+                    }, child: const Text('Log Out')),
+                  ],
+                ),
+              );
+            },
+            showAdminActions: true,
+          ),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: _goToPage,
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+        ],
       ),
     );
   }
 }
 
-// ------------------ CLASSROOMS PAGE (stateful) ------------------
+// ------------------ PROFILE PAGE (copied from your provided code) ------------------
+class ProfilePage extends StatefulWidget {
+  final String userName;
+  final String userEmail;
+  final String dept;
+  final String section;
+  final bool isDark;
+  final ValueChanged<bool>? onToggleTheme;
+  final ValueChanged<String>? onUpdateName;
+  final ValueChanged<String>? onUpdateEmail;
+
+  // --- New admin-related optional parameters (merged without logic changes) ---
+  final String? initialPhotoUrl; // allow parent to provide profile image URL
+  final VoidCallback? onChangePhoto; // called when "Change Photo" is pressed
+  final VoidCallback? onChangePassword; // called when "Change Password" is pressed
+  final VoidCallback? onLogout; // called when "Log out" is pressed
+  final bool showAdminActions; // whether to show admin action tiles
+
+  const ProfilePage({
+    super.key,
+    required this.userName,
+    required this.userEmail,
+    required this.dept,
+    required this.section,
+    this.isDark = false,
+    this.onToggleTheme,
+    this.onUpdateName,
+    this.onUpdateEmail,
+    // admin additions
+    this.initialPhotoUrl,
+    this.onChangePhoto,
+    this.onChangePassword,
+    this.onLogout,
+    this.showAdminActions = false,
+  });
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
+  late String _name;
+  late String _email;
+  late bool _localIsDark; // local copy for immediate UI response
+  late String _profileImage; // local copy for image fallback
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = widget.userName;
+    _email = widget.userEmail;
+    _localIsDark = widget.isDark;
+    _profileImage = widget.initialPhotoUrl ?? "https://i.pravatar.cc/150?img=3";
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOut));
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isDark != widget.isDark) {
+      _localIsDark = widget.isDark;
+    }
+    if (oldWidget.initialPhotoUrl != widget.initialPhotoUrl && widget.initialPhotoUrl != null) {
+      _profileImage = widget.initialPhotoUrl!;
+    }
+  }
+
+  Future<void> _editName() async {
+    final ctrl = TextEditingController(text: _name);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.edit, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            const Text('Edit Name'),
+          ],
+        ),
+        content: TextField(
+          controller: ctrl,
+          decoration: InputDecoration(
+            labelText: 'Full Name',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: const Icon(Icons.person),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && ctrl.text.trim().isNotEmpty) {
+      setState(() => _name = ctrl.text.trim());
+      widget.onUpdateName?.call(_name);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('Name updated successfully'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _editEmail() async {
+    final ctrl = TextEditingController(text: _email);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.email, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            const Text('Edit Email'),
+          ],
+        ),
+        content: TextField(
+          controller: ctrl,
+          decoration: InputDecoration(
+            labelText: 'Email Address',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: const Icon(Icons.email),
+          ),
+          keyboardType: TextInputType.emailAddress,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && ctrl.text.trim().isNotEmpty) {
+      setState(() => _email = ctrl.text.trim());
+      widget.onUpdateEmail?.call(_email);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('Email updated successfully'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  void _changeProfileImage() {
+    // call parent callback if provided, otherwise update locally (visual only)
+    if (widget.onChangePhoto != null) {
+      widget.onChangePhoto!.call();
+      return;
+    }
+    setState(() {
+      _profileImage = 'https://images.unsplash.com/photo-1525973132219-a04334a76080?auto=format&fit=crop&w=800&q=80';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text('Profile photo updated'),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  Future<void> _changePasswordDialog() async {
+    if (widget.onChangePassword != null) {
+      widget.onChangePassword!.call();
+      return;
+    }
+    final oldCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.lock, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            const Text('Change Password'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: oldCtrl,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'Current password',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.lock_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: newCtrl,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'New password',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.lock),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmCtrl,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'Confirm new password',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.lock),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (newCtrl.text != confirmCtrl.text || newCtrl.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Row(
+                      children: [
+                        Icon(Icons.error, color: Colors.white),
+                        SizedBox(width: 12),
+                        Text('Passwords do not match'),
+                      ],
+                    ),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(dCtx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.white),
+                      SizedBox(width: 12),
+                      Text('Password changed successfully'),
+                    ],
+                  ),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _logoutDialog() async {
+    if (widget.onLogout != null) {
+      widget.onLogout!.call();
+      return;
+    }
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+            const SizedBox(width: 12),
+            const Text('Log out?'),
+          ],
+        ),
+        content: const Text('Are you sure you want to sign out of this device?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dCtx, true),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('Logged out successfully'),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  Widget _buildInfoCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        // <-- use same header gradient here (dark -> grey/black; light -> mint/teal)
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: headerGradientColors(isDark),
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: (isDark ? headerGradientColors(isDark).first : const Color(0xFF00ACC1)).withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Stack(
+                children: [
+                  Hero(
+                    tag: 'profile_image',
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 4),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: CircleAvatar(
+                        radius: 45,
+                        backgroundImage: NetworkImage(_profileImage),
+                        // Keep the avatar itself unchanged; the card background now follows header colors.
+                      ),
+                    ),
+                  ),
+                  if (widget.showAdminActions)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: InkWell(
+                        onTap: widget.onChangePhoto ?? _changeProfileImage,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: Icon(Icons.camera_alt, size: 18, color: cs.primary),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.school, color: Colors.white, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${widget.dept} - ${widget.section}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.email, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _email,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    Color? iconColor,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: (iconColor ?? cs.primary).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: iconColor ?? cs.primary, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cs.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              _localIsDark ? Icons.dark_mode : Icons.light_mode,
+              color: cs.primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Theme',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _localIsDark ? 'Dark mode enabled' : 'Light mode enabled',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: _localIsDark,
+            onChanged: (value) {
+              setState(() => _localIsDark = value);
+              widget.onToggleTheme?.call(value);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            _buildInfoCard(context),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Account Settings',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  _buildActionCard(
+                    context: context,
+                    icon: Icons.person,
+                    title: 'Edit Name',
+                    subtitle: 'Update your display name',
+                    onTap: _editName,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildActionCard(
+                    context: context,
+                    icon: Icons.email,
+                    title: 'Edit Email',
+                    subtitle: 'Change your email address',
+                    onTap: _editEmail,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildThemeCard(context),
+
+                  if (widget.showAdminActions) ...[
+                    const SizedBox(height: 12),
+                    _buildActionCard(
+                      context: context,
+                      icon: Icons.lock,
+                      title: 'Change Password',
+                      subtitle: 'Update your password',
+                      onTap: widget.onChangePassword ?? _changePasswordDialog,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildActionCard(
+                      context: context,
+                      icon: Icons.logout,
+                      title: 'Log Out',
+                      subtitle: 'Sign out of your account',
+                      onTap: widget.onLogout ?? _logoutDialog,
+                      iconColor: Theme.of(context).colorScheme.error,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------ CLASSROOMS PAGE (responsive, debounced) ------------------
+// (animated entry added; other features unchanged)
 class ClassroomsPage extends StatefulWidget {
   const ClassroomsPage({super.key});
 
@@ -287,211 +983,610 @@ class ClassroomsPage extends StatefulWidget {
   State<ClassroomsPage> createState() => _ClassroomsPageState();
 }
 
-class _ClassroomsPageState extends State<ClassroomsPage> {
-  final Map<String, bool?> _roomStatus = {};
-  final Map<String, String> _roomTypeOverride = {};
+class _ClassroomsPageState extends State<ClassroomsPage> with SingleTickerProviderStateMixin {
+  String selectedFloor = 'All Floors';
+  String selectedType = 'All';
+  String _searchQuery = '';
+  Timer? _searchDebounce;
 
-  String _filterType = 'Class';
-  String _filterFloor = 'Ground';
-  String _filterOccupancy = 'All';
+  // animation controller & tweens (added)
+  late final AnimationController _entryController;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+
+  // Sample classroom data with occupancy status
+  final List<Map<String, dynamic>> classrooms = [
+    {
+      'name': 'Room 101',
+      'floor': '1st Floor',
+      'capacity': 60,
+      'occupied': true,
+      'subject': 'Mathematics',
+      'time': '9:00 AM - 10:00 AM',
+      'type': 'Class',
+    },
+    {
+      'name': 'Room 102',
+      'floor': '1st Floor',
+      'capacity': 50,
+      'occupied': false,
+      'subject': '',
+      'time': '',
+      'type': 'Class',
+    },
+    {
+      'name': 'Room 103',
+      'floor': '1st Floor',
+      'capacity': 40,
+      'occupied': true,
+      'subject': 'Physics',
+      'time': '10:00 AM - 11:00 AM',
+      'type': 'Class',
+    },
+    {
+      'name': 'Room 201',
+      'floor': '2nd Floor',
+      'capacity': 70,
+      'occupied': false,
+      'subject': '',
+      'time': '',
+      'type': 'Class',
+    },
+    {
+      'name': 'Room 202',
+      'floor': '2nd Floor',
+      'capacity': 55,
+      'occupied': true,
+      'subject': 'Chemistry',
+      'time': '11:00 AM - 12:00 PM',
+      'type': 'Class',
+    },
+    {
+      'name': 'Room 203',
+      'floor': '2nd Floor',
+      'capacity': 45,
+      'occupied': false,
+      'subject': '',
+      'time': '',
+      'type': 'Class',
+    },
+    {
+      'name': 'Room 301',
+      'floor': '3rd Floor',
+      'capacity': 80,
+      'occupied': true,
+      'subject': 'Computer Science',
+      'time': '2:00 PM - 3:00 PM',
+      'type': 'Class',
+    },
+    {
+      'name': 'Room 302',
+      'floor': '3rd Floor',
+      'capacity': 60,
+      'occupied': false,
+      'subject': '',
+      'time': '',
+      'type': 'Class',
+    },
+    {
+      'name': 'Room 303',
+      'floor': '3rd Floor',
+      'capacity': 50,
+      'occupied': true,
+      'subject': 'English',
+      'time': '3:00 PM - 4:00 PM',
+      'type': 'Class',
+    },
+    {
+      'name': 'Lab A',
+      'floor': '1st Floor',
+      'capacity': 30,
+      'occupied': false,
+      'subject': '',
+      'time': '',
+      'type': 'Lab',
+    },
+    {
+      'name': 'Lab B',
+      'floor': '2nd Floor',
+      'capacity': 35,
+      'occupied': true,
+      'subject': 'Electronics Lab',
+      'time': '1:00 PM - 3:00 PM',
+      'type': 'Lab',
+    },
+    {
+      'name': 'Computer Lab 1',
+      'floor': '3rd Floor',
+      'capacity': 40,
+      'occupied': false,
+      'subject': '',
+      'time': '',
+      'type': 'Lab',
+    },
+    {
+      'name': 'Physics Lab',
+      'floor': '2nd Floor',
+      'capacity': 25,
+      'occupied': true,
+      'subject': 'Physics Practical',
+      'time': '10:00 AM - 12:00 PM',
+      'type': 'Lab',
+    },
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    var rooms = _generateRoomsExclusive(_filterType, _filterFloor);
-    rooms = rooms.where((r) {
-      final status = _roomStatus[r['name']!];
-      if (_filterOccupancy == 'All') return true;
-      if (_filterOccupancy == 'Occupied') return status == true;
-      if (_filterOccupancy == 'Not occupied') return status == false;
-      return true;
-    }).toList();
+  void initState() {
+    super.initState();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Classrooms')),
-      body: Column(children: [
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: _ResponsiveFilters(
-            type: _filterType,
-            floor: _filterFloor,
-            occ: _filterOccupancy,
-            onType: (v) => setState(() => _filterType = v),
-            onFloor: (v) => setState(() => _filterFloor = v),
-            onOcc: (v) => setState(() => _filterOccupancy = v),
+    // entry animations (same feel as ProfilePage)
+    _entryController = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _entryController, curve: Curves.easeOut));
+    _slide = Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(CurvedAnimation(parent: _entryController, curve: Curves.easeOut));
+    _entryController.forward();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _entryController.dispose();
+    super.dispose();
+  }
+
+  // Debounced setter for search text
+  void _onSearchChanged(String text) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() => _searchQuery = text.trim());
+    });
+  }
+
+  List<Map<String, dynamic>> get filteredClassrooms {
+    final q = _searchQuery.toLowerCase();
+    return classrooms.where((room) {
+      final matchesFloor = selectedFloor == 'All Floors' || room['floor'] == selectedFloor;
+      final matchesType = selectedType == 'All' || room['type'] == selectedType;
+      final matchesSearch = q.isEmpty || (room['name'] as String).toLowerCase().contains(q);
+      return matchesFloor && matchesType && matchesSearch;
+    }).toList();
+  }
+
+  int get occupiedCount => filteredClassrooms.where((r) => r['occupied'] == true).length;
+  int get availableCount => filteredClassrooms.where((r) => r['occupied'] == false).length;
+
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.filter_list, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            const Text('Filter by Type', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildFilterOption('All', Icons.grid_view_rounded),
+            const SizedBox(height: 12),
+            _buildFilterOption('Class', Icons.class_rounded),
+            const SizedBox(height: 12),
+            _buildFilterOption('Lab', Icons.science_rounded),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterOption(String type, IconData icon) {
+    final isSelected = selectedType == type;
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context);
+        if (!mounted) return;
+        setState(() => selectedType = type);
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? scheme.primaryContainer : scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? scheme.primary : scheme.outlineVariant.withOpacity(0.5),
+            width: isSelected ? 2 : 1,
           ),
         ),
-        const SizedBox(height: 10),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.all(12),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 4 / 3),
-            itemCount: rooms.length,
-            itemBuilder: (itemCtx, i) {
-              final r = rooms[i];
-              final name = r['name']!;
-              final type = r['type']!;
-              final floor = r['floor']!;
-              final wing = r['wing']!;
-              return InkWell(
-                onTap: () => _showOccupancySheet(context, name, r['base']!, type),
-                child: Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(fit: StackFit.expand, children: [
-                    Container(color: Colors.grey.shade200),
-                    Align(alignment: Alignment.topRight, child: Padding(padding: const EdgeInsets.all(8), child: _buildStatusPill(context, name))),
-                    Align(alignment: Alignment.bottomLeft, child: Padding(padding: const EdgeInsets.all(10), child: Text(name, style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w700)))),
-                    Align(alignment: Alignment.centerRight, child: Padding(padding: const EdgeInsets.all(10), child: Text('$type • $floor', style: TextStyle(color: scheme.onSurfaceVariant)))),
-                  ]),
-                ),
-              );
-            },
-          ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? scheme.primary : scheme.onSurfaceVariant, size: 24),
+            const SizedBox(width: 12),
+            Text(
+              type,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? scheme.primary : scheme.onSurface,
+              ),
+            ),
+            const Spacer(),
+            if (isSelected) Icon(Icons.check_circle, color: scheme.primary, size: 24),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, ColorScheme scheme) {
+    final isSelected = selectedFloor == label;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (_) {
+          if (!mounted) return;
+          setState(() => selectedFloor = label);
+        },
+        backgroundColor: scheme.surfaceContainerHighest,
+        selectedColor: scheme.primaryContainer,
+        labelStyle: TextStyle(
+          color: isSelected ? scheme.onPrimaryContainer : scheme.onSurface,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(BuildContext context, String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [color, color.withOpacity(0.7)]),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 6))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: Colors.white, size: 28),
+        const SizedBox(height: 10),
+        Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(label, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.w500)),
       ]),
     );
   }
 
-  int _floorToInt(String floor) {
-    switch (floor) {
-      case 'Ground':
-        return 0;
-      case 'First':
-        return 1;
-      case 'Second':
-        return 2;
-      case 'Third':
-        return 3;
-      default:
-        return 0;
-    }
-  }
+  Widget _buildClassroomCard(BuildContext context, Map<String, dynamic> room) {
+    final isOccupied = room['occupied'] as bool;
+    final isLab = room['type'] == 'Lab';
+    final statusColor = isOccupied ? const Color(0xFFEF4444) : const Color(0xFF10B981);
+    final scheme = Theme.of(context).colorScheme;
 
-  String _defaultTypeForBase(String base) {
-    final digits = RegExp(r'\d+').firstMatch(base)?.group(0) ?? '0';
-    final last = int.parse(digits[digits.length - 1]);
-    return (last == 0 || last == 5) ? 'Lab' : 'Class';
-  }
-
-  List<Map<String, String>> _generateRoomsExclusive(String filterType, String floor) {
-    final floorNum = _floorToInt(floor);
-    final List<Map<String, String>> out = [];
-    for (final wing in ['N', 'S']) {
-      for (int i = 0; i <= 10; i++) {
-        final roomNum = "$floorNum${i.toString().padLeft(2, '0')}";
-        final base = '$wing$roomNum';
-        final assigned = _roomTypeOverride[base] ?? _defaultTypeForBase(base);
-        if (assigned == filterType) {
-          final visibleName = assigned == 'Lab' ? '${base}L' : base;
-          out.add({'name': visibleName, 'base': base, 'type': assigned, 'floor': floor, 'wing': wing});
-        }
-      }
-    }
-    out.sort((a, b) {
-      if (a['wing'] != b['wing']) return a['wing']!.compareTo(b['wing']!);
-      final na = int.parse(a['base']!.replaceAll(RegExp(r'[^0-9]'), ''));
-      final nb = int.parse(b['base']!.replaceAll(RegExp(r'[^0-9]'), ''));
-      return na.compareTo(nb);
-    });
-    return out;
-  }
-
-  void _showOccupancySheet(BuildContext ctx, String roomName, String base, String currentType) {
-    final assigned = _roomTypeOverride[base];
-    final effectiveType = assigned ?? currentType;
-    showModalBottomSheet(
-      context: ctx,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (bCtx) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(bCtx).dividerColor, borderRadius: BorderRadius.circular(999)))]),
-          const SizedBox(height: 16),
-          Text(roomName, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          const SizedBox(height: 4),
-          Text('Base: $base • Type: $effectiveType', textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(
-              child: FilledButton.tonal(
-                onPressed: () {
-                  setState(() => _roomStatus[roomName] = true);
-                  Navigator.pop(bCtx);
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Marked as Occupied')));
-                },
-                child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Occupied')),
-              ),
+    return InkWell(
+      onTap: () => _showClassroomDetails(context, room),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: statusColor.withOpacity(0.3), width: 2),
+          boxShadow: [BoxShadow(color: statusColor.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4))],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [statusColor, statusColor.withOpacity(0.6)]),
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                onPressed: () {
-                  setState(() => _roomStatus[roomName] = false);
-                  Navigator.pop(bCtx);
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Marked as Not occupied')));
-                },
-                child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Not occupied')),
-              ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: statusColor.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                    child: Icon(isLab ? Icons.science_rounded : (isOccupied ? Icons.door_front_door : Icons.meeting_room_outlined),
+                        color: statusColor, size: 24),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: statusColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                    child: Text(isOccupied ? 'OCCUPIED' : 'AVAILABLE', style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold)),
+                  ),
+                ]),
+                const Spacer(),
+                Text(room['name'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: scheme.onSurface)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isLab ? const Color(0xFFFF9800).withOpacity(0.15) : const Color(0xFF00ACC1).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(isLab ? Icons.science_rounded : Icons.class_rounded, size: 11, color: isLab ? const Color(0xFFFF9800) : const Color(0xFF00ACC1)),
+                    const SizedBox(width: 3),
+                    Text(room['type'], style: TextStyle(fontSize: 10, color: isLab ? const Color(0xFFFF9800) : const Color(0xFF00ACC1), fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+                const SizedBox(height: 5),
+                Row(children: [Icon(Icons.layers, size: 12, color: scheme.onSurfaceVariant), const SizedBox(width: 3), Text(room['floor'], style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant))]),
+                const SizedBox(height: 3),
+                Row(children: [Icon(Icons.people, size: 12, color: scheme.onSurfaceVariant), const SizedBox(width: 3), Text('${room['capacity']} seats', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant))]),
+                if (isOccupied && (room['subject'] as String).isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(color: scheme.primaryContainer.withOpacity(0.5), borderRadius: BorderRadius.circular(5)),
+                    child: Text(room['subject'], style: TextStyle(fontSize: 10, color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ]),
             ),
-          ]),
+          ),
         ]),
       ),
     );
   }
 
-  Widget _buildStatusPill(BuildContext context, String roomName) {
-    final cs = Theme.of(context).colorScheme;
-    final status = _roomStatus[roomName];
-    if (status == true) return _pill('Occupied', cs.errorContainer, cs.onErrorContainer);
-    if (status == false) return _pill('Not occupied', cs.primaryContainer, cs.onPrimaryContainer);
-    return _pill('Unknown', cs.surfaceVariant, cs.onSurfaceVariant);
-  }
+  void _showClassroomDetails(BuildContext context, Map<String, dynamic> room) {
+    final isOccupied = room['occupied'] as bool;
+    final statusColor = isOccupied ? const Color(0xFFEF4444) : const Color(0xFF10B981);
+    final scheme = Theme.of(context).colorScheme;
 
-  Widget _pill(String label, Color bg, Color fg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999), boxShadow: [BoxShadow(blurRadius: 8, offset: const Offset(0, 2), color: Colors.black.withOpacity(.15))]),
-      child: Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: fg)),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(color: scheme.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(28))),
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: scheme.onSurfaceVariant.withOpacity(0.4), borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 24),
+          Row(children: [
+            Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: statusColor.withOpacity(0.15), borderRadius: BorderRadius.circular(16)), child: Icon(isOccupied ? Icons.door_front_door : Icons.meeting_room_outlined, color: statusColor, size: 32)),
+            const SizedBox(width: 16),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(room['name'], style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: scheme.onSurface)),
+              const SizedBox(height: 4),
+              Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: statusColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: Text(isOccupied ? 'OCCUPIED' : 'AVAILABLE', style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold))),
+            ])),
+          ]),
+          const SizedBox(height: 24),
+          _buildDetailRow(Icons.category, 'Type', room['type'], scheme),
+          _buildDetailRow(Icons.layers, 'Floor', room['floor'], scheme),
+          _buildDetailRow(Icons.people, 'Capacity', '${room['capacity']} seats', scheme),
+          if (isOccupied) ...[
+            _buildDetailRow(Icons.book, 'Subject', room['subject'], scheme),
+            _buildDetailRow(Icons.access_time, 'Time', room['time'], scheme),
+          ],
+          const SizedBox(height: 16),
+
+          // occupancy controls (coloured)
+          Row(children: [
+            if (!isOccupied)
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    if (!mounted) return;
+                    setState(() => room['occupied'] = true);
+                    Navigator.pop(context);
+                    // ---------- UPDATED OCCUPIED SNACKBAR ----------
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: const Color(0xFFEF4444),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        content: Row(
+                          children: [
+                            const Icon(Icons.door_front_door, color: Colors.white),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '${room['name']} marked OCCUPIED',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.door_front_door),
+                  label: const Text('Mark Occupied'),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ),
+            if (!isOccupied) const SizedBox(width: 12),
+            if (isOccupied)
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () {
+                    if (!mounted) return;
+                    setState(() => room['occupied'] = false);
+                    Navigator.pop(context);
+                    // ---------- UPDATED AVAILABLE SNACKBAR ----------
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: const Color(0xFF10B981),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        content: Row(
+                          children: [
+                            const Icon(Icons.meeting_room_outlined, color: Colors.white),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '${room['name']} marked AVAILABLE',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.meeting_room_outlined),
+                  label: const Text('Mark Available'),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 16),
+
+          SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.check_circle_outline), label: const Text('Got it'), style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
+          SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
+        ]),
+      ),
     );
   }
-}
 
-// -------- Responsive Filters --------
-class _ResponsiveFilters extends StatelessWidget {
-  final String type, floor, occ;
-  final ValueChanged<String> onType, onFloor, onOcc;
-  const _ResponsiveFilters({super.key, required this.type, required this.floor, required this.occ, required this.onType, required this.onFloor, required this.onOcc});
+  Widget _buildDetailRow(IconData icon, String label, String value, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(children: [
+        Icon(icon, size: 20, color: scheme.primary),
+        const SizedBox(width: 12),
+        Text('$label: ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: scheme.onSurfaceVariant)),
+        Expanded(child: Text(value, style: TextStyle(fontSize: 16, color: scheme.onSurface))),
+      ]),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (ctx, c) {
-      final w = c.maxWidth;
-      final cols = w >= 900 ? 3 : (w >= 600 ? 2 : 1);
-      final spacing = 12.0;
-      final itemW = (w - (spacing * (cols - 1))) / cols;
-      Widget box(Widget child) => SizedBox(width: itemW, child: child);
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-      return Wrap(spacing: spacing, runSpacing: spacing, children: [
-        box(DropdownButtonFormField<String>(
-          value: type,
-          decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-          items: const ['Class', 'Lab'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-          onChanged: (v) => onType(v!),
-        )),
-        box(DropdownButtonFormField<String>(
-          value: floor,
-          decoration: const InputDecoration(labelText: 'Floor', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-          items: const ['Ground', 'First', 'Second', 'Third'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-          onChanged: (v) => onFloor(v!),
-        )),
-        box(DropdownButtonFormField<String>(
-          value: occ,
-          decoration: const InputDecoration(labelText: 'Filter', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-          items: const ['All', 'Occupied', 'Not occupied'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-          onChanged: (v) => onOcc(v!),
-        )),
-      ]);
-    });
+    // Wrap the entire Scaffold in the same Fade + Slide transition used in ProfilePage.
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: Scaffold(
+          body: CustomScrollView(slivers: [
+            SliverAppBar(
+              expandedHeight: 160,
+              pinned: true,
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 12, top: 8, bottom: 8),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                      child: Container(
+                        height: 44,
+                        width: 44,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white.withOpacity(0.06)
+                              : Colors.white.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white.withOpacity(0.06)
+                                : Colors.white.withOpacity(0.14),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.12),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            )
+                          ],
+                        ),
+                        child: IconButton(
+                          splashRadius: 22,
+                          icon: Stack(
+                            children: [
+                              const Center(child: Icon(Icons.filter_list, color: Colors.white)),
+                              if (selectedType != 'All')
+                                Positioned(
+                                  right: 2,
+                                  top: 2,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEF4444),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 1.5),
+                                    ),
+                                    constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          onPressed: _showFilterDialog,
+                          tooltip: 'Filter',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                title: const Text('Classroom Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, shadows: [Shadow(blurRadius: 8, color: Colors.black26)])),
+                background: Container(
+                  // <-- use same header gradient here
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: headerGradientColors(isDark)),
+                  ),
+                  child: Stack(children: [Positioned(right: -50, top: -50, child: Icon(Icons.meeting_room, size: 180, color: Colors.white.withOpacity(0.1)))]),
+                ),
+              ),
+            ),
+
+            // Stats row (AVAILABLE left, OCCUPIED right)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(children: [
+                  Row(children: [
+                    Expanded(child: _buildStatCard(context, 'Available', availableCount.toString(), Icons.meeting_room_outlined, const Color(0xFF10B981))),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildStatCard(context, 'Occupied', occupiedCount.toString(), Icons.door_front_door, const Color(0xFFEF4444))),
+                  ]),
+                  const SizedBox(height: 16),
+                  // Debounced Search Field (still present in Classrooms area)
+                  TextField(
+                    onChanged: _onSearchChanged,
+                    decoration: InputDecoration(
+                      hintText: 'Search classrooms...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: scheme.surfaceContainerHighest,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [_buildFilterChip('All Floors', scheme), _buildFilterChip('1st Floor', scheme), _buildFilterChip('2nd Floor', scheme), _buildFilterChip('3rd Floor', scheme)])),
+                ]),
+              ),
+            ),
+
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              sliver: SliverGrid(gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.85, crossAxisSpacing: 12, mainAxisSpacing: 12), delegate: SliverChildBuilderDelegate((context, index) {
+                final room = filteredClassrooms[index];
+                return _buildClassroomCard(context, room);
+              }, childCount: filteredClassrooms.length)),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          ]),
+        ),
+      ),
+    );
   }
 }

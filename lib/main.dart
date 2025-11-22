@@ -7,13 +7,13 @@ import 'home_page.dart';
 import 'auth_service.dart';
 import 'teacher_homepage.dart';
 import 'admin_homepage.dart';
-import 'staff_homepage.dart';
+import 'staff_homepage.dart'; // This imports TeachersHome
 import 'student_homepage.dart';
 import 'forgot_password_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const RootApp()); // <--- You named it RootApp
+  runApp(const RootApp());
 }
 
 class RootApp extends StatefulWidget {
@@ -112,7 +112,7 @@ class _LoginPageState extends State<LoginPage> {
         left: -50,
         child: _FloatingOrb(
           size: 200,
-          color: const Color(0xFFD4AF37).withValues(alpha: 0.1),
+          color: const Color(0xFFD4AF37).withOpacity(0.1),
         ),
       ),
       Positioned(
@@ -120,7 +120,7 @@ class _LoginPageState extends State<LoginPage> {
         right: -30,
         child: _FloatingOrb(
           size: 150,
-          color: const Color(0xFFA4123F).withValues(alpha: 0.2),
+          color: const Color(0xFFA4123F).withOpacity(0.2),
         ),
       ),
       Positioned(
@@ -128,16 +128,13 @@ class _LoginPageState extends State<LoginPage> {
         right: 50,
         child: _FloatingOrb(
           size: 250,
-          color: const Color(0xFFD4AF37).withValues(alpha: 0.15),
+          color: const Color(0xFFD4AF37).withOpacity(0.15),
         ),
       ),
       Positioned(
         bottom: 100,
         left: -40,
-        child: _FloatingOrb(
-          size: 180,
-          color: Colors.white.withValues(alpha: 0.05),
-        ),
+        child: _FloatingOrb(size: 180, color: Colors.white.withOpacity(0.05)),
       ),
     ];
   }
@@ -169,26 +166,26 @@ class _LoginPageState extends State<LoginPage> {
         Widget targetPage;
 
         if (role == 'teacher') {
-          // ✅ TEACHER → teacher_homepage.dart
+          // Teacher → teacher_homepage.dart
           targetPage = TeacherHomePage(
-            universityName: "Amrita Vishwa Vidyapeetham — Teacher",
+            universityName: "Amrita Vishwa Vidyapeetham – Teacher",
             userName: userName,
             userEmail: userEmail,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
         } else if (role == 'staff') {
+          // Staff → staff_homepage.dart (StaffHomePage class)
           targetPage = StaffHomePage(
-            universityName: "Amrita Vishwa Vidyapeetham — Staff",
-            userName: userName,
-            userEmail: userEmail,
+            universityName: "Amrita Vishwa Vidyapeetham – Staff",
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
         } else if (role == 'admin') {
-          // 💡 FIX: Changed AdminHomePage to AdminApp and removed unnecessary arguments
+          // Admin → admin_homepage.dart
           targetPage = const AdminApp();
         } else if (role == 'classrep') {
+          // Class Rep → home_page.dart
           targetPage = HomePage(
             universityName: _getUniversityNameForRole(role),
             userName: userName,
@@ -244,13 +241,13 @@ class _LoginPageState extends State<LoginPage> {
   String _getUniversityNameForRole(String role) {
     switch (role) {
       case 'admin':
-        return "Amrita Vishwa Vidyapeetham — Admin";
+        return "Amrita Vishwa Vidyapeetham – Admin";
       case 'classrep':
       case 'class_rep':
       case 'cr':
-        return "Amrita Vishwa Vidyapeetham — CR";
+        return "Amrita Vishwa Vidyapeetham – CR";
       case 'staff':
-        return "Amrita Vishwa Vidyapeetham — Staff";
+        return "Amrita Vishwa Vidyapeetham – Staff";
       default:
         return "Amrita Vishwa Vidyapeetham";
     }
@@ -271,7 +268,7 @@ class _LoginPageState extends State<LoginPage> {
               const Color(0xFF1a0a14),
               maroonColor,
               const Color(0xFF5a1035),
-              maroonColor.withValues(alpha: 0.8),
+              maroonColor.withOpacity(0.8),
               const Color(0xFF2d0a1f),
             ],
             stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
@@ -301,13 +298,13 @@ class _LoginPageState extends State<LoginPage> {
                             shape: BoxShape.circle,
                             gradient: LinearGradient(
                               colors: [
-                                Colors.white.withValues(alpha: 0.2),
-                                Colors.white.withValues(alpha: 0.1),
+                                Colors.white.withOpacity(0.2),
+                                Colors.white.withOpacity(0.1),
                               ],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: goldColor.withValues(alpha: 0.3),
+                                color: goldColor.withOpacity(0.3),
                                 blurRadius: 30,
                                 spreadRadius: 5,
                               ),
@@ -319,7 +316,11 @@ class _LoginPageState extends State<LoginPage> {
                             height: 100,
                             fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) =>
-                                Icon(Icons.school, size: 100, color: goldColor),
+                                const Icon(
+                                  Icons.school,
+                                  size: 100,
+                                  color: goldColor,
+                                ),
                           ),
                         ),
 
@@ -334,7 +335,7 @@ class _LoginPageState extends State<LoginPage> {
                             color: Colors.white,
                             shadows: [
                               Shadow(
-                                color: maroonColor.withValues(alpha: 0.5),
+                                color: maroonColor.withOpacity(0.5),
                                 blurRadius: 10,
                               ),
                             ],
@@ -347,7 +348,7 @@ class _LoginPageState extends State<LoginPage> {
                           "Sign in to continue",
                           style: TextStyle(
                             fontSize: 16,
-                            color: Colors.white.withValues(alpha: 0.8),
+                            color: Colors.white.withOpacity(0.8),
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -363,17 +364,17 @@ class _LoginPageState extends State<LoginPage> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                Colors.white.withValues(alpha: 0.15),
-                                Colors.white.withValues(alpha: 0.05),
+                                Colors.white.withOpacity(0.15),
+                                Colors.white.withOpacity(0.05),
                               ],
                             ),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.2),
+                              color: Colors.white.withOpacity(0.2),
                               width: 1.5,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
+                                color: Colors.black.withOpacity(0.2),
                                 blurRadius: 30,
                                 spreadRadius: -5,
                               ),
@@ -399,17 +400,17 @@ class _LoginPageState extends State<LoginPage> {
                                         decoration: InputDecoration(
                                           labelText: "Email",
                                           labelStyle: TextStyle(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.8,
+                                            color: Colors.white.withOpacity(
+                                              0.8,
                                             ),
                                           ),
-                                          prefixIcon: Icon(
+                                          prefixIcon: const Icon(
                                             Icons.email_outlined,
                                             color: goldColor,
                                           ),
                                           filled: true,
-                                          fillColor: Colors.white.withValues(
-                                            alpha: 0.1,
+                                          fillColor: Colors.white.withOpacity(
+                                            0.1,
                                           ),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(
@@ -422,8 +423,8 @@ class _LoginPageState extends State<LoginPage> {
                                               15,
                                             ),
                                             borderSide: BorderSide(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.2,
+                                              color: Colors.white.withOpacity(
+                                                0.2,
                                               ),
                                               width: 1,
                                             ),
@@ -432,7 +433,7 @@ class _LoginPageState extends State<LoginPage> {
                                             borderRadius: BorderRadius.circular(
                                               15,
                                             ),
-                                            borderSide: BorderSide(
+                                            borderSide: const BorderSide(
                                               color: goldColor,
                                               width: 2,
                                             ),
@@ -455,17 +456,17 @@ class _LoginPageState extends State<LoginPage> {
                                         decoration: InputDecoration(
                                           labelText: "Password",
                                           labelStyle: TextStyle(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.8,
+                                            color: Colors.white.withOpacity(
+                                              0.8,
                                             ),
                                           ),
-                                          prefixIcon: Icon(
+                                          prefixIcon: const Icon(
                                             Icons.lock_outline,
                                             color: goldColor,
                                           ),
                                           filled: true,
-                                          fillColor: Colors.white.withValues(
-                                            alpha: 0.1,
+                                          fillColor: Colors.white.withOpacity(
+                                            0.1,
                                           ),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(
@@ -478,8 +479,8 @@ class _LoginPageState extends State<LoginPage> {
                                               15,
                                             ),
                                             borderSide: BorderSide(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.2,
+                                              color: Colors.white.withOpacity(
+                                                0.2,
                                               ),
                                               width: 1,
                                             ),
@@ -488,7 +489,7 @@ class _LoginPageState extends State<LoginPage> {
                                             borderRadius: BorderRadius.circular(
                                               15,
                                             ),
-                                            borderSide: BorderSide(
+                                            borderSide: const BorderSide(
                                               color: goldColor,
                                               width: 2,
                                             ),
@@ -511,32 +512,31 @@ class _LoginPageState extends State<LoginPage> {
                                             backgroundColor: maroonColor,
                                             foregroundColor: Colors.white,
                                             elevation: 8,
-                                            shadowColor: maroonColor.withValues(
-                                              alpha: 0.5,
-                                            ),
+                                            shadowColor: maroonColor
+                                                .withOpacity(0.5),
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                              BorderRadius.circular(15),
+                                                  BorderRadius.circular(15),
                                             ),
                                           ),
                                           child: _loading
                                               ? const SizedBox(
-                                            height: 24,
-                                            width: 24,
-                                            child:
-                                            CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2.5,
-                                            ),
-                                          )
+                                                  height: 24,
+                                                  width: 24,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        color: Colors.white,
+                                                        strokeWidth: 2.5,
+                                                      ),
+                                                )
                                               : const Text(
-                                            "Login",
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              letterSpacing: 1,
-                                            ),
-                                          ),
+                                                  "Login",
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                    letterSpacing: 1,
+                                                  ),
+                                                ),
                                         ),
                                       ),
 
@@ -548,7 +548,7 @@ class _LoginPageState extends State<LoginPage> {
                                             context,
                                             MaterialPageRoute(
                                               builder: (_) =>
-                                              const ForgotPasswordPage(),
+                                                  const ForgotPasswordPage(),
                                             ),
                                           );
                                         },
@@ -559,7 +559,7 @@ class _LoginPageState extends State<LoginPage> {
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
                                             decoration:
-                                            TextDecoration.underline,
+                                                TextDecoration.underline,
                                           ),
                                         ),
                                       ),
@@ -577,6 +577,43 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// Minimal StaffHomePage widget to satisfy usage in login navigation.
+// If you have a full implementation in staff_homepage.dart, you can remove this
+// stub and ensure the correct class is exported from that file.
+class StaffHomePage extends StatelessWidget {
+  final String universityName;
+  final bool isDark;
+  final ValueChanged<bool> onToggleTheme;
+
+  const StaffHomePage({
+    super.key,
+    required this.universityName,
+    required this.isDark,
+    required this.onToggleTheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(universityName),
+        actions: [
+          IconButton(
+            icon: Icon(isDark ? Icons.dark_mode : Icons.light_mode),
+            onPressed: () => onToggleTheme(!isDark),
+          ),
+        ],
+      ),
+      body: Center(
+        child: Text(
+          'Staff Home',
+          style: Theme.of(context).textTheme.headlineMedium,
         ),
       ),
     );
@@ -626,20 +663,12 @@ class _FloatingOrbState extends State<_FloatingOrb>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
-                colors: [widget.color, widget.color.withValues(alpha: 0)],
+                colors: [widget.color, widget.color.withOpacity(0)],
               ),
             ),
           ),
         );
       },
     );
-  }
-}
-
-// Placeholder for extension on Color for cleaner code (assuming it exists in your actual project)
-extension on Color {
-  Color withValues({double? alpha}) {
-    if (alpha == null) return this;
-    return this.withOpacity(alpha);
   }
 }

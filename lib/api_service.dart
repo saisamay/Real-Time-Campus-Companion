@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'timetable_model.dart'; // Import the model
 
 final _storage = const FlutterSecureStorage();
 const _tokenKey = 'auth_token';
@@ -151,7 +152,34 @@ class ApiService {
     }
   }
 
-  // Search timetable by params
+  // Get timetable by branch, semester, and section (returns Timetable model)
+  static Future<Timetable> getTimetable(
+    String branch,
+    String semester,
+    String section,
+  ) async {
+    final q = Uri(
+      queryParameters: {
+        'semester': semester,
+        'branch': branch,
+        'section': section,
+      },
+    );
+    final url = Uri.parse('$baseUrl/api/timetable/search?${q.query}');
+    final res = await http.get(url, headers: await _headers(auth: true));
+    
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return Timetable.fromJson(data);
+    } else {
+      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
+      throw Exception(
+        body['error'] ?? 'Timetable not found (${res.statusCode})',
+      );
+    }
+  }
+
+  // Search timetable by params (returns raw Map)
   static Future<Map<String, dynamic>> searchTimetable({
     required String semester,
     required String branch,
@@ -164,13 +192,46 @@ class ApiService {
         'section': section,
       },
     );
-    final url = Uri.parse('$baseUrl/api/timetable/search${q.toString()}');
+    final url = Uri.parse('$baseUrl/api/timetable/search?${q.query}');
     final res = await http.get(url, headers: await _headers(auth: true));
     if (res.statusCode == 200) {
       return jsonDecode(res.body) as Map<String, dynamic>;
     } else {
       final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
       throw Exception(body['error'] ?? 'Search failed (${res.statusCode})');
+    }
+  }
+
+  // Update a specific slot in timetable (for Class Reps)
+  static Future<void> updateSlot({
+    required String semester,
+    required String branch,
+    required String section,
+    required String dayName,
+    required int slotIndex,
+    required bool isCancelled,
+    String? newRoom,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/timetable/update-slot');
+    final res = await http.post(
+      url,
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'semester': semester,
+        'branch': branch,
+        'section': section,
+        'dayName': dayName,
+        'slotIndex': slotIndex,
+        'isCancelled': isCancelled,
+        'newRoom': newRoom,
+      }),
+    );
+
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
+      throw Exception(
+        body['error'] ?? 'Failed to update slot (${res.statusCode})',
+      );
     }
   }
 

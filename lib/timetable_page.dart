@@ -9,6 +9,107 @@ class TimetablePage extends StatefulWidget {
   @override
   State<TimetablePage> createState() => _TimetablePageState();
 }
+// lib/timetable_model.dart
+
+class Slot {
+  final String room;
+  final String color;
+  final String title;
+  final String subtitle;
+  final String subject;
+  final String teacher;
+
+  Slot({
+    this.room = '',
+    this.color = '#FFFFFF',
+    this.title = '',
+    this.subtitle = '',
+    this.subject = '',
+    this.teacher = '',
+  });
+
+  factory Slot.fromJson(Map<String, dynamic> json) {
+    return Slot(
+      room: json['room'] ?? '',
+      color: json['color'] ?? '#FFFFFF',
+      title: json['title'] ?? '',
+      subtitle: json['subtitle'] ?? '',
+      subject: json['subject'] ?? '',
+      teacher: json['teacher'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'room': room,
+    'color': color,
+    'title': title,
+    'subtitle': subtitle,
+    'subject': subject,
+    'teacher': teacher,
+  };
+}
+
+class Day {
+  final String dayName;
+  final List<Slot> slots;
+
+  Day({required this.dayName, required this.slots});
+
+  factory Day.fromJson(Map<String, dynamic> json) {
+    final slotsJson = json['slots'] as List<dynamic>? ?? [];
+    final slots = slotsJson.map((s) {
+      if (s is Slot) return s;
+      if (s is Map<String, dynamic>) return Slot.fromJson(s);
+      return Slot();
+    }).toList();
+    return Day(dayName: json['dayName'] ?? json['name'] ?? '', slots: slots);
+  }
+
+  Map<String, dynamic> toJson() => {
+    'dayName': dayName,
+    'slots': slots.map((s) => s.toJson()).toList(),
+  };
+}
+
+class Timetable {
+  final String id;
+  final String semester;
+  final String branch;
+  final String section;
+  final List<Day> grid;
+
+  Timetable({
+    this.id = '',
+    this.semester = '',
+    this.branch = '',
+    this.section = '',
+    required this.grid,
+  });
+
+  factory Timetable.fromJson(Map<String, dynamic> json) {
+    final gridJson = json['grid'] as List<dynamic>? ?? [];
+    final grid = gridJson.map((d) {
+      if (d is Day) return d;
+      if (d is Map<String, dynamic>) return Day.fromJson(d);
+      return Day(dayName: '', slots: []);
+    }).toList();
+    return Timetable(
+      id: json['id'] ?? json['_id'] ?? '',
+      semester: json['semester'] ?? '',
+      branch: json['branch'] ?? '',
+      section: json['section'] ?? '',
+      grid: grid,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'semester': semester,
+    'branch': branch,
+    'section': section,
+    'grid': grid.map((d) => d.toJson()).toList(),
+  };
+}
 
 class _TimetablePageState extends State<TimetablePage> {
   // Placeholder for current user role and Timetable ID (will be fetched)
@@ -110,7 +211,9 @@ class _TimetablePageState extends State<TimetablePage> {
       setState(() {
         _error = e.toString();
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Search error: ${e.toString()}')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Search error: ${e.toString()}')));
     } finally {
       setState(() {
         _loading = false;
@@ -124,7 +227,11 @@ class _TimetablePageState extends State<TimetablePage> {
     // For now, assume no temporary status, use permanent data.
     final String permanentRoom = slot.room;
     final String currentTitle = slot.title;
-    final bool canEdit = ['admin', 'teacher', 'classrep'].contains(_currentUserRole);
+    final bool canEdit = [
+      'admin',
+      'teacher',
+      'classrep',
+    ].contains(_currentUserRole);
     final String timetableId = _currentTimetableId ?? '';
 
     showModalBottomSheet(
@@ -135,7 +242,9 @@ class _TimetablePageState extends State<TimetablePage> {
           builder: (BuildContext context, StateSetter setState) {
             // Inner state for the temporary changes form
             String? selectedOption; // 'CANCELLED', 'SHIFTED', 'ROOM_CHANGE'
-            TextEditingController roomController = TextEditingController(text: permanentRoom);
+            TextEditingController roomController = TextEditingController(
+              text: permanentRoom,
+            );
             TextEditingController shiftController = TextEditingController();
 
             // Function to handle the API call for setting status
@@ -163,7 +272,13 @@ class _TimetablePageState extends State<TimetablePage> {
               //   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
               // }
 
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status set: $selectedOption. API call pending.')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Status set: $selectedOption. API call pending.',
+                  ),
+                ),
+              );
               Navigator.pop(context);
             }
 
@@ -172,7 +287,10 @@ class _TimetablePageState extends State<TimetablePage> {
 
               return [
                 const Divider(),
-                Text('⚠️ Temporary Class Status Update (Resets 6:00 PM)', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  '⚠️ Temporary Class Status Update (Resets 6:00 PM)',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 12),
 
                 // Option 1: Class Cancelled
@@ -192,7 +310,10 @@ class _TimetablePageState extends State<TimetablePage> {
                 ),
                 if (selectedOption == 'SHIFTED')
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     child: TextField(
                       controller: shiftController,
                       decoration: const InputDecoration(
@@ -212,7 +333,10 @@ class _TimetablePageState extends State<TimetablePage> {
                 ),
                 if (selectedOption == 'ROOM_CHANGE')
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     child: TextField(
                       controller: roomController,
                       decoration: const InputDecoration(
@@ -230,14 +354,20 @@ class _TimetablePageState extends State<TimetablePage> {
                     TextButton(
                       onPressed: () {
                         // TODO: Phase 2 - Call API to CLEAR temporary status
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Status Cleared. API call pending.')));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Status Cleared. API call pending.'),
+                          ),
+                        );
                         Navigator.pop(context);
                       },
                       child: const Text('Clear Status'),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: selectedOption != null ? _applyStatusChange : null,
+                      onPressed: selectedOption != null
+                          ? _applyStatusChange
+                          : null,
                       child: const Text('Apply Temporary Change'),
                     ),
                   ],
@@ -246,7 +376,12 @@ class _TimetablePageState extends State<TimetablePage> {
             }
 
             return Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -254,7 +389,8 @@ class _TimetablePageState extends State<TimetablePage> {
                   children: [
                     Text(
                       currentTitle,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     Text(slot.subtitle),
                     const Divider(),
@@ -264,12 +400,16 @@ class _TimetablePageState extends State<TimetablePage> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.access_time),
-                      title: Text('Slot: ${slots[slotIndex]['no']}  •  ${slots[slotIndex]['time']}'),
+                      title: Text(
+                        'Slot: ${slots[slotIndex]['no']}  •  ${slots[slotIndex]['time']}',
+                      ),
                     ),
                     ListTile(
                       leading: const Icon(Icons.location_on),
                       // Displaying Permanent Room
-                      title: Text('Permanent Room: ${permanentRoom.isNotEmpty ? permanentRoom : 'N/A'}'),
+                      title: Text(
+                        'Permanent Room: ${permanentRoom.isNotEmpty ? permanentRoom : 'N/A'}',
+                      ),
                       // TODO: Phase 2 - Add subtitle here to show current temporary room/status if DailyStatus exists
                     ),
 
@@ -315,14 +455,23 @@ class _TimetablePageState extends State<TimetablePage> {
                 child: InputDecorator(
                   decoration: InputDecoration(
                     label: const Text('Semester'),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       isExpanded: true,
                       value: selectedSemester,
-                      items: semesters.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      items: semesters
+                          .map(
+                            (s) => DropdownMenuItem(value: s, child: Text(s)),
+                          )
+                          .toList(),
                       onChanged: (v) => setState(() {
                         if (v != null) selectedSemester = v;
                       }),
@@ -337,14 +486,23 @@ class _TimetablePageState extends State<TimetablePage> {
                 child: InputDecorator(
                   decoration: InputDecoration(
                     label: const Text('Branch'),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       isExpanded: true,
                       value: selectedBranch,
-                      items: branches.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+                      items: branches
+                          .map(
+                            (b) => DropdownMenuItem(value: b, child: Text(b)),
+                          )
+                          .toList(),
                       onChanged: (v) => setState(() {
                         if (v != null) selectedBranch = v;
                       }),
@@ -359,14 +517,23 @@ class _TimetablePageState extends State<TimetablePage> {
                 child: InputDecorator(
                   decoration: InputDecoration(
                     label: const Text('Section'),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       isExpanded: true,
                       value: selectedSection,
-                      items: sections.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+                      items: sections
+                          .map(
+                            (b) => DropdownMenuItem(value: b, child: Text(b)),
+                          )
+                          .toList(),
                       onChanged: (v) => setState(() {
                         if (v != null) selectedSection = v;
                       }),
@@ -381,7 +548,9 @@ class _TimetablePageState extends State<TimetablePage> {
                 label: const Text('Search'),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(140, 46),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ],
@@ -408,7 +577,8 @@ class _TimetablePageState extends State<TimetablePage> {
     }
 
     // if we have server timetable, use it. If not, treat it as empty.
-    final hasServer = _currentTimetable != null && _currentTimetable!.grid.isNotEmpty;
+    final hasServer =
+        _currentTimetable != null && _currentTimetable!.grid.isNotEmpty;
     // Base days structure (Mon-Fri) always needed for UI structure
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
@@ -429,26 +599,53 @@ class _TimetablePageState extends State<TimetablePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(width: 120), // empty cell for top-left
-              ...slots.map((s) => Container(
-                width: 160,
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(border: Border.all(color: Colors.black12)),
-                child: Column(
-                  children: [
-                    Text(s['time']!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
-                    const SizedBox(height: 4),
-                    Text('(${s['no']})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                  ],
+              ...slots.map(
+                (s) => Container(
+                  width: 160,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 6,
+                  ),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        s['time']!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '(${s['no']})',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              )),
+              ),
             ],
           ),
 
           // rows for each day
           ...days.map((day) {
             // Get slots, providing empty slots if the timetable or day is missing
-            final List<Slot> cells = gridMap[day] ?? List.generate(9, (_) => Slot(title: '', subtitle: '', color: '#FFFFFFFF', room: ''));
+            final List<Slot> cells =
+                gridMap[day] ??
+                List.generate(
+                  9,
+                  (_) => Slot(
+                    title: '',
+                    subtitle: '',
+                    color: '#FFFFFFFF',
+                    room: '',
+                  ),
+                );
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,21 +654,34 @@ class _TimetablePageState extends State<TimetablePage> {
                 Container(
                   width: 120,
                   height: 100,
-                  margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                  margin: const EdgeInsets.symmetric(
+                    vertical: 6,
+                    horizontal: 4,
+                  ),
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: Colors.grey[100], border: Border.all(color: Colors.black12)),
-                  child: Text(day, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: Text(
+                    day,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
                 // cells
                 ...List.generate(9, (index) {
-                  final Slot slot = cells[index]; // Always guaranteed to be a Slot object
+                  final Slot slot =
+                      cells[index]; // Always guaranteed to be a Slot object
                   final bg = hexToColor(slot.color);
                   return GestureDetector(
                     onTap: () => _showCellDetailsFromSlot(day, index, slot),
                     child: Container(
                       width: 160,
                       height: 100,
-                      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                      margin: const EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 4,
+                      ),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: bg,
@@ -484,14 +694,23 @@ class _TimetablePageState extends State<TimetablePage> {
                           // title (bigger, fits ~10 big chars)
                           Text(
                             slot.title,
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           // ADDED: Display the permanent room number
                           Text(
-                            slot.room.isNotEmpty ? 'Room: ${slot.room}' : 'No Room',
-                            style: TextStyle(fontSize: 11, color: Colors.blueGrey[700], fontWeight: FontWeight.bold),
+                            slot.room.isNotEmpty
+                                ? 'Room: ${slot.room}'
+                                : 'No Room',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.blueGrey[700],
+                              fontWeight: FontWeight.bold,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -507,13 +726,19 @@ class _TimetablePageState extends State<TimetablePage> {
                           ),
                           Align(
                             alignment: Alignment.bottomRight,
-                            child: Text('(${slots[index]['no']})', style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                          )
+                            child: Text(
+                              '(${slots[index]['no']})',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   );
-                })
+                }),
               ],
             );
           }).toList(),
@@ -525,10 +750,7 @@ class _TimetablePageState extends State<TimetablePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Time Table'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Time Table'), centerTitle: true),
       body: Column(
         children: [
           _buildControls(),
@@ -541,10 +763,7 @@ class _TimetablePageState extends State<TimetablePage> {
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
-                  children: [
-                    _buildTimetable(),
-                    const SizedBox(height: 24),
-                  ],
+                  children: [_buildTimetable(), const SizedBox(height: 24)],
                 ),
               ),
             ),
