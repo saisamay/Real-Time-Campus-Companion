@@ -1,14 +1,35 @@
 import 'dart:convert';
 
-// --- COURSE MODEL (For Admin Selection) ---
+// --- SEARCH RESULT MODEL (For Admin Dropdown) ---
+class TeacherSearchResult {
+  final String id;
+  final String name;
+  final String dept;
+  final String? image;
+
+  TeacherSearchResult({required this.id, required this.name, required this.dept, this.image});
+
+  factory TeacherSearchResult.fromJson(Map<String, dynamic> json) {
+    return TeacherSearchResult(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      dept: json['dept'] ?? '',
+      image: json['image'],
+    );
+  }
+}
+
+// --- COURSE MODEL ---
 class Course {
   final String id;
   final String courseName;
   final String courseCode;
   final String branch;
-  final String semester; // "S5"
+  final String semester;
   final String section;
   final String facultyName;
+  final String facultyImage; // <--- Added
+  final String facultyDept;  // <--- Added
   final String color;
 
   Course({
@@ -19,6 +40,8 @@ class Course {
     required this.semester,
     required this.section,
     required this.facultyName,
+    this.facultyImage = '',
+    this.facultyDept = '',
     required this.color,
   });
 
@@ -31,6 +54,8 @@ class Course {
       semester: json['semester'] ?? '',
       section: json['section'] ?? '',
       facultyName: json['facultyName'] ?? '',
+      facultyImage: json['facultyImage'] ?? '',
+      facultyDept: json['facultyDept'] ?? '',
       color: json['color'] ?? '#FFFFFFFF',
     );
   }
@@ -41,17 +66,21 @@ class TimetableSlot {
   String courseCode;
   String courseName;
   String facultyName;
+  String facultyImage; // <--- Added
+  String facultyDept;  // <--- Added
   String color;
-  String type; // "Theory", "Lab", or ""
+  String type;
   String room;
   bool isCancelled;
-  String? newRoom; // Nullable
-  String displayContext; // For teachers (e.g. "CSE S5 A")
+  String? newRoom;
+  String displayContext;
 
   TimetableSlot({
     this.courseCode = '',
     this.courseName = '',
     this.facultyName = '',
+    this.facultyImage = '',
+    this.facultyDept = '',
     this.color = '#FFFFFFFF',
     this.type = '',
     this.room = '',
@@ -65,6 +94,8 @@ class TimetableSlot {
       courseCode: json['courseCode'] ?? '',
       courseName: json['courseName'] ?? '',
       facultyName: json['facultyName'] ?? '',
+      facultyImage: json['facultyImage'] ?? '',
+      facultyDept: json['facultyDept'] ?? '',
       color: json['color'] ?? '#FFFFFFFF',
       type: json['type'] ?? '',
       room: json['room'] ?? '',
@@ -79,6 +110,8 @@ class TimetableSlot {
       'courseCode': courseCode,
       'courseName': courseName,
       'facultyName': facultyName,
+      'facultyImage': facultyImage,
+      'facultyDept': facultyDept,
       'color': color,
       'type': type,
       'room': room,
@@ -88,49 +121,32 @@ class TimetableSlot {
   }
 }
 
-// --- TIMETABLE DAY MODEL ---
+// ... TimetableDay and Timetable classes remain the same ...
+// (Just make sure to keep them in the file as they were)
 class TimetableDay {
   final String dayName;
   final List<TimetableSlot> slots;
-
   TimetableDay({required this.dayName, required this.slots});
-
   factory TimetableDay.fromJson(Map<String, dynamic> json) {
     var list = json['slots'] as List;
-    List<TimetableSlot> slotsList = list.map((i) => TimetableSlot.fromJson(i)).toList();
-    return TimetableDay(dayName: json['dayName'], slots: slotsList);
+    return TimetableDay(dayName: json['dayName'], slots: list.map((i) => TimetableSlot.fromJson(i)).toList());
   }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'dayName': dayName,
-      'slots': slots.map((e) => e.toJson()).toList(),
-    };
-  }
+  Map<String, dynamic> toJson() => {'dayName': dayName, 'slots': slots.map((e) => e.toJson()).toList()};
 }
 
-// --- MAIN TIMETABLE MODEL ---
 class Timetable {
   final String semester;
   final String branch;
   final String section;
   final List<TimetableDay> grid;
-
-  Timetable({
-    required this.semester,
-    required this.branch,
-    required this.section,
-    required this.grid,
-  });
-
+  Timetable({required this.semester, required this.branch, required this.section, required this.grid});
   factory Timetable.fromJson(Map<String, dynamic> json) {
     var list = json['grid'] as List;
-    List<TimetableDay> gridList = list.map((i) => TimetableDay.fromJson(i)).toList();
     return Timetable(
       semester: json['semester']?.toString() ?? '',
       branch: json['branch'] ?? '',
       section: json['section'] ?? '',
-      grid: gridList,
+      grid: list.map((i) => TimetableDay.fromJson(i)).toList(),
     );
   }
 }

@@ -173,6 +173,11 @@ class _AddTimetablePageState extends State<AddTimetablePage> {
                     s.courseCode = selectedCourse!.courseCode;
                     s.courseName = selectedCourse!.courseName;
                     s.facultyName = selectedCourse!.facultyName;
+
+                    // COPY THE NEW FIELDS
+                    s.facultyImage = selectedCourse!.facultyImage;
+                    s.facultyDept = selectedCourse!.facultyDept;
+
                     s.color = selectedCourse!.color;
                     s.type = type;
                     s.room = roomCtrl.text;

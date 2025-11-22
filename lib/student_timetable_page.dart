@@ -163,20 +163,48 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title
-            Text(
-              slot.courseName.isEmpty ? 'Free Slot' : slot.courseName,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            // --- NEW HEADER WITH PROFILE ---
+            Row(
+              children: [
+                // Profile Picture
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Colors.blue.shade100,
+                  backgroundImage: (slot.facultyImage.isNotEmpty)
+                      ? NetworkImage(slot.facultyImage)
+                      : null,
+                  child: (slot.facultyImage.isEmpty && slot.facultyName.isNotEmpty)
+                      ? Text(slot.facultyName[0], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20))
+                      : null,
+                ),
+                const SizedBox(width: 16),
+
+                // Name and Course Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        slot.facultyName.isNotEmpty ? slot.facultyName : "Free Slot",
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      if (slot.facultyDept.isNotEmpty)
+                        Text(
+                            "Dept of ${slot.facultyDept}",
+                            style: const TextStyle(color: Colors.grey, fontSize: 12)
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            if (slot.courseCode.isNotEmpty)
-              Text(slot.courseCode, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+            const SizedBox(height: 8),
             const Divider(),
 
             // Info Rows

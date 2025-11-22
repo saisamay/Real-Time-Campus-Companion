@@ -20,6 +20,22 @@ class ApiService {
   // SECTION 1: HEADERS & TOKENS (Infrastructure)
   // ===========================================================================
 
+  // Add this inside ApiService class
+  static Future<List<TeacherSearchResult>> searchTeachers(String query) async {
+    if (query.isEmpty) return [];
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/users/teachers?search=$query'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      List jsonResponse = json.decode(response.body);
+      return jsonResponse.map((item) => TeacherSearchResult.fromJson(item)).toList();
+    } else {
+      throw Exception('Failed to search teachers');
+    }
+  }
+
   static Future<Map<String, String>> _headers({bool auth = false}) async {
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (auth) {
