@@ -1,9 +1,9 @@
 // lib/Events_page.dart
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart'; // <--- 1. Import this
 import 'api_service.dart';
-import 'event_registration_page.dart';
 
-// --- DATA MODEL for an Event ---
+// --- UPDATED DATA MODEL ---
 class Event {
   final String id;
   final String title;
@@ -11,6 +11,7 @@ class Event {
   final DateTime date;
   final String imageUrl;
   final List<String> regulations;
+  final String registrationLink; // <--- 2. Added field
 
   Event({
     required this.id,
@@ -19,6 +20,7 @@ class Event {
     required this.date,
     required this.imageUrl,
     required this.regulations,
+    required this.registrationLink,
   });
 
   factory Event.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class Event {
       regulations: json['regulations'] != null
           ? List<String>.from(json['regulations'])
           : [],
+      registrationLink: json['registrationLink'] ?? '', // <--- Map from JSON
     );
   }
 }
@@ -65,10 +68,10 @@ class _EventsPageState extends State<EventsPage> {
     });
 
     try {
+      // Assuming ApiService.getAllEvents() returns List<Map<String, dynamic>>
       final eventsData = await ApiService.getAllEvents();
 
-      // Check if eventsData is valid
-      if (eventsData == null || eventsData.isEmpty) {
+      if (eventsData.isEmpty) {
         setState(() {
           _allEvents = [];
           _upcomingEvents = [];
@@ -78,8 +81,6 @@ class _EventsPageState extends State<EventsPage> {
       }
 
       final events = eventsData.map((e) => Event.fromJson(e)).toList();
-
-      // Sort events by date (earliest first)
       events.sort((a, b) => a.date.compareTo(b.date));
 
       setState(() {
@@ -88,7 +89,7 @@ class _EventsPageState extends State<EventsPage> {
         _loading = false;
       });
     } catch (e) {
-      print('Error loading events: $e'); // Debug print
+      print('Error loading events: $e');
       setState(() {
         _error = 'Unable to load events. Please check your connection.';
         _loading = false;
@@ -150,12 +151,6 @@ class _EventsPageState extends State<EventsPage> {
               onPressed: _loadEvents,
               icon: const Icon(Icons.refresh),
               label: const Text('Try Again'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
             ),
           ],
         ),
@@ -197,7 +192,6 @@ class _EventsPageState extends State<EventsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Section 1: Top 4 Upcoming Events (Horizontal Image Slider)
             if (_upcomingEvents.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.fromLTRB(16.0, 20.0, 16.0, 12.0),
@@ -219,8 +213,6 @@ class _EventsPageState extends State<EventsPage> {
               ),
               const SizedBox(height: 24),
             ],
-
-            // Section 2: All Events (Vertical List)
             const Padding(
               padding: EdgeInsets.fromLTRB(16.0, 0, 16.0, 12.0),
               child: Text(
@@ -242,7 +234,6 @@ class _EventsPageState extends State<EventsPage> {
     );
   }
 
-  // Image card for the horizontal slider
   Widget _buildUpcomingEventImageCard(Event event) {
     return GestureDetector(
       onTap: () => _showEventDetailsPopup(context, event),
@@ -258,34 +249,16 @@ class _EventsPageState extends State<EventsPage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Event Image
               Image.network(
                 event.imageUrl,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    color: Colors.grey[300],
-                    child: const Center(child: CircularProgressIndicator()),
-                  );
-                },
                 errorBuilder: (context, error, stackTrace) => Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.deepPurple.shade300,
-                        Colors.deepPurple.shade600,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
+                  color: Colors.deepPurple.shade300,
                   child: const Center(
                     child: Icon(Icons.event, size: 60, color: Colors.white),
                   ),
                 ),
               ),
-              // Gradient overlay
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -295,7 +268,6 @@ class _EventsPageState extends State<EventsPage> {
                   ),
                 ),
               ),
-              // Event Title and Date
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -345,7 +317,6 @@ class _EventsPageState extends State<EventsPage> {
     );
   }
 
-  // List tile widget for the vertical list
   Widget _buildAllEventsListItem(Event event) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
@@ -362,28 +333,8 @@ class _EventsPageState extends State<EventsPage> {
             child: Image.network(
               event.imageUrl,
               fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: Colors.grey[300],
-                  child: const Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                );
-              },
               errorBuilder: (context, error, stackTrace) => Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.deepPurple.shade300,
-                      Colors.deepPurple.shade600,
-                    ],
-                  ),
-                ),
+                color: Colors.deepPurple.shade300,
                 child: const Icon(Icons.event, color: Colors.white),
               ),
             ),
@@ -411,7 +362,6 @@ class _EventsPageState extends State<EventsPage> {
     );
   }
 
-  // Event Details Popup with Registration Button
   void _showEventDetailsPopup(BuildContext context, Event event) {
     showModalBottomSheet(
       context: context,
@@ -432,7 +382,6 @@ class _EventsPageState extends State<EventsPage> {
               ),
               child: Column(
                 children: [
-                  // Drag Handle
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12.0),
                     child: Container(
@@ -444,14 +393,11 @@ class _EventsPageState extends State<EventsPage> {
                       ),
                     ),
                   ),
-
-                  // Scrollable Content
                   Expanded(
                     child: ListView(
                       controller: scrollController,
                       padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
                       children: [
-                        // Event Image
                         ClipRRect(
                           borderRadius: BorderRadius.circular(16),
                           child: SizedBox(
@@ -460,41 +406,19 @@ class _EventsPageState extends State<EventsPage> {
                             child: Image.network(
                               event.imageUrl,
                               fit: BoxFit.cover,
-                              loadingBuilder:
-                                  (context, child, loadingProgress) {
-                                    if (loadingProgress == null) return child;
-                                    return Container(
-                                      color: Colors.grey[300],
-                                      child: const Center(
-                                        child: CircularProgressIndicator(),
-                                      ),
-                                    );
-                                  },
-                              errorBuilder: (context, error, stackTrace) =>
+                              errorBuilder: (context, error, stackController) =>
                                   Container(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.deepPurple.shade300,
-                                          Colors.deepPurple.shade600,
-                                        ],
-                                      ),
-                                    ),
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.event,
-                                        size: 80,
-                                        color: Colors.white,
-                                      ),
+                                    color: Colors.deepPurple.shade300,
+                                    child: const Icon(
+                                      Icons.event,
+                                      size: 80,
+                                      color: Colors.white,
                                     ),
                                   ),
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 20),
-
-                        // Event Title
                         Text(
                           event.title,
                           style: const TextStyle(
@@ -503,8 +427,6 @@ class _EventsPageState extends State<EventsPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-
-                        // Event Date
                         Row(
                           children: [
                             const Icon(
@@ -522,12 +444,9 @@ class _EventsPageState extends State<EventsPage> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 20),
                         const Divider(),
                         const SizedBox(height: 20),
-
-                        // Description Section
                         const Text(
                           'Description',
                           style: TextStyle(
@@ -540,10 +459,7 @@ class _EventsPageState extends State<EventsPage> {
                           event.description,
                           style: const TextStyle(fontSize: 16, height: 1.5),
                         ),
-
                         const SizedBox(height: 24),
-
-                        // Rules & Regulations Section
                         if (event.regulations.isNotEmpty) ...[
                           const Text(
                             'Rules & Regulations',
@@ -559,23 +475,45 @@ class _EventsPageState extends State<EventsPage> {
                           const SizedBox(height: 32),
                         ],
 
-                        // Registration Button
+                        // 🚀 CODE TO LAUNCH EXTERNAL LINK (The functional part)
                         Center(
                           child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context); // Close bottom sheet
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => EventRegistrationPage(
-                                    eventId: event.id,
-                                    eventTitle: event.title,
+                            onPressed: () async {
+                              final url = event.registrationLink;
+                              if (url.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'No registration link available.',
+                                    ),
                                   ),
-                                ),
-                              );
+                                );
+                                return;
+                              }
+
+                              final uri = Uri.parse(url);
+                              try {
+                                if (await canLaunchUrl(uri)) {
+                                  // This line opens the URL in the external browser
+                                  await launchUrl(
+                                    uri,
+                                    mode: LaunchMode.externalApplication,
+                                  );
+                                } else {
+                                  throw 'Could not launch $url';
+                                }
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Error opening link: ${e.toString()}',
+                                    ),
+                                  ),
+                                );
+                              }
                             },
                             icon: const Icon(
-                              Icons.app_registration,
+                              Icons.open_in_new,
                               color: Colors.white,
                             ),
                             label: const Text(
@@ -611,7 +549,6 @@ class _EventsPageState extends State<EventsPage> {
     );
   }
 
-  // Rule item widget with check icon
   Widget _buildRuleItem(String rule) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),

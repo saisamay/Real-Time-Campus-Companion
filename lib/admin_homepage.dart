@@ -1,11 +1,10 @@
-// admin_homepage.dart
+// lib/admin_homepage.dart
 import 'dart:io' show File;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-
-// Import necessary external files that were likely removed in the upload snippet
-// You'll need to make sure these exist or remove the import if they are placeholders.
-// import 'main.dart'; // <--- Removed this line as it causes circular import
+import 'event_handler.dart'; // Connects to your full Event Management page
+import 'api_service.dart';   // Connects to Backend
+import 'main.dart';          // For LoginPage
 
 class AdminApp extends StatefulWidget {
   const AdminApp({Key? key}) : super(key: key);
@@ -50,27 +49,42 @@ class _AdminHomeState extends State<AdminHome> {
   int? _hoveredEventIndex;
   int? _hoveredUserIndex;
 
+  // --- Backend Data State ---
+  List<dynamic> _dashboardEvents = [];
+  bool _isLoading = true;
+
+  // Mock Users (Replace with ApiService.getAllUsers() later if needed)
   final List<Map<String, String>> _users = [
     {'id': 'u1', 'roll': 'R001'},
     {'id': 'u2', 'roll': 'R002'},
     {'id': 'u3', 'roll': 'R003'},
   ];
 
-  final List<Map<String, String>> _events = [
-    {'id': 'e1', 'title': 'AI Workshop', 'limit': '5'},
-    {'id': 'e2', 'title': 'Hackathon', 'limit': '10'},
-  ];
-
-  final Map<String, Set<String>> _eventRegistrations = {
-    'e1': {'u1'},
-    'e2': {},
-  };
-
   String _adminName = 'Admin';
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  // uploaded image local path from conversation
   final String uploadedImage = 'file:///mnt/data/79635ee1-9b59-441e-a6de-9ff829b6402f.png';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData(); // Fetch real data on startup
+  }
+
+  // --- Fetch Real Data from Backend ---
+  Future<void> _fetchDashboardData() async {
+    try {
+      final events = await ApiService.getAllEvents();
+      if (mounted) {
+        setState(() {
+          _dashboardEvents = events;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error loading dashboard data: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   List<Color> get _palette => [
     const Color(0xFF0D6EFD),
@@ -118,12 +132,6 @@ class _AdminHomeState extends State<AdminHome> {
     return roll.length >= 2 ? roll.substring(roll.length - 2) : roll;
   }
 
-  int _totalRegistrations() {
-    var sum = 0;
-    for (final s in _eventRegistrations.values) sum += s.length;
-    return sum;
-  }
-
   Widget _buildHome() {
     return LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth;
@@ -136,13 +144,15 @@ class _AdminHomeState extends State<AdminHome> {
       final usersStart = const Color(0xFFFFB300);
       final usersEnd = const Color(0xFFEF6C00);
 
+      final eventCount = _dashboardEvents.length.toString();
+
       Widget summaryRow;
       final cardEvents = SizedBox(
           width: narrow ? 260 : null,
-          child: _summaryCard('Events', _events.length.toString(), Icons.event, start: eventsStart, end: eventsEnd));
+          child: _summaryCard('Events', eventCount, Icons.event, start: eventsStart, end: eventsEnd));
       final cardRegs = SizedBox(
           width: narrow ? 260 : null,
-          child: _summaryCard('Registrations', _totalRegistrations().toString(), Icons.how_to_reg, start: regsStart, end: regsEnd));
+          child: _summaryCard('Registrations', 'N/A', Icons.how_to_reg, start: regsStart, end: regsEnd));
       final cardUsers = SizedBox(
           width: narrow ? 260 : null,
           child: _summaryCard('Users', _users.length.toString(), Icons.people, start: usersStart, end: usersEnd));
@@ -166,7 +176,7 @@ class _AdminHomeState extends State<AdminHome> {
 
       return SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // Header banner - theme toggle removed from here (as you asked)
+          // Header banner
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             height: narrow ? 140 : 160,
@@ -198,7 +208,6 @@ class _AdminHomeState extends State<AdminHome> {
                       Text('Manage your university dashboard', style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12)),
                     ]),
                   ),
-                  // NOTE: Theme icon removed from banner; AppBar still has a toggle button.
                 ],
               ),
             ),
@@ -224,36 +233,72 @@ class _AdminHomeState extends State<AdminHome> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Recent events', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              Column(
-                children: _events.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final e = entry.value;
-                  final regs = _eventRegistrations[e['id']] ?? <String>{};
-                  final limit = int.tryParse(e['limit'] ?? '0') ?? 0;
-                  final accent = _paletteColor(i);
-                  final bg = widget.isDark ? _paletteColor(i, opacity: 0.12) : _paletteColor(i, opacity: 0.10);
-                  final isHovered = _hoveredEventIndex == i;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: MouseRegion(
-                      onEnter: (_) => setState(() => _hoveredEventIndex = i),
-                      onExit: (_) => setState(() => _hoveredEventIndex = null),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        transform: Matrix4.identity()..scale(isHovered ? 1.02 : 1.0),
-                        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-                        child: ListTile(
-                          leading: Container(width: 8, height: double.infinity, decoration: BoxDecoration(color: accent, borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)))),
-                          title: Text(e['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Text('${regs.length}/${limit > 0 ? limit : '∞'} registrations'),
-                          trailing: limit > 0 && regs.length >= limit ? const Chip(label: Text('Full'), backgroundColor: Colors.redAccent) : const Icon(Icons.chevron_right),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              
+              // --- REAL EVENTS LIST FROM BACKEND ---
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator())
+              else if (_dashboardEvents.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text("No events found."),
+                )
+              else
+                Column(
+                  children: _dashboardEvents.take(5).toList().asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final event = entry.value;
+                    
+                    final String title = event['title'] ?? 'Untitled';
+                    final String imageUrl = event['imageUrl'] ?? '';
+                    // Format date: YYYY-MM-DD
+                    final String date = event['date'] != null 
+                        ? event['date'].toString().substring(0, 10) 
+                        : '';
+
+                    final bg = widget.isDark ? _paletteColor(i, opacity: 0.12) : _paletteColor(i, opacity: 0.10);
+                    final isHovered = _hoveredEventIndex == i;
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: MouseRegion(
+                        onEnter: (_) => setState(() => _hoveredEventIndex = i),
+                        onExit: (_) => setState(() => _hoveredEventIndex = null),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          transform: Matrix4.identity()..scale(isHovered ? 1.02 : 1.0),
+                          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+                          child: ListTile(
+                            leading: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: imageUrl.isNotEmpty
+                                  ? Image.network(
+                                      imageUrl,
+                                      width: 50,
+                                      height: 50,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (c, o, s) => Container(
+                                        width: 50, height: 50, 
+                                        color: _paletteColor(i), 
+                                        child: const Icon(Icons.event, color: Colors.white)
+                                      ),
+                                    )
+                                  : Container(
+                                      width: 50, height: 50,
+                                      color: _paletteColor(i),
+                                      child: const Icon(Icons.event, color: Colors.white),
+                                    ),
+                            ),
+                            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: Text(date),
+                            trailing: const Icon(Icons.chevron_right),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                }).toList(),
-              ),
+                    );
+                  }).toList(),
+                ),
+
               const SizedBox(height: 18),
               Text('Recent users', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
@@ -295,102 +340,6 @@ class _AdminHomeState extends State<AdminHome> {
   }
 
   Widget _buildTimetable() => const Center(child: Text('Timetable (no content)'));
-
-  Widget _buildEvents() {
-    final titleCtrl = TextEditingController();
-    final limitCtrl = TextEditingController();
-    return Padding(
-      padding: const EdgeInsets.all(12.0),
-      child: Column(children: [
-        ElevatedButton.icon(
-          onPressed: () {
-            titleCtrl.clear();
-            limitCtrl.clear();
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Create Event'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Event Title')),
-                  const SizedBox(height: 8),
-                  TextField(controller: limitCtrl, decoration: const InputDecoration(labelText: 'Registration Limit (number)'), keyboardType: TextInputType.number),
-                ]),
-                actions: [
-                  TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-                  ElevatedButton(
-                      onPressed: () {
-                        if (titleCtrl.text.trim().isEmpty) return;
-                        final id = 'e${DateTime.now().millisecondsSinceEpoch}';
-                        final limitText = int.tryParse(limitCtrl.text.trim())?.toString() ?? '0';
-                        setState(() {
-                          _events.add({'id': id, 'title': titleCtrl.text.trim(), 'limit': limitText});
-                          _eventRegistrations[id] = <String>{};
-                        });
-                        Navigator.of(ctx).pop();
-                      },
-                      child: const Text('Create')),
-                ],
-              ),
-            );
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('Create Event'),
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: _events.isEmpty ? const Center(child: Text('No events yet')) : ListView.builder(
-            itemCount: _events.length,
-            itemBuilder: (ctx, i) {
-              final event = _events[i];
-              final regs = _eventRegistrations[event['id']] ?? <String>{};
-              final limit = int.tryParse(event['limit'] ?? '0') ?? 0;
-              final accent = _paletteColor(i);
-              final bg = widget.isDark ? _paletteColor(i, opacity: 0.12) : _paletteColor(i, opacity: 0.14);
-              final isHovered = _hoveredEventIndex == i;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: MouseRegion(
-                  onEnter: (_) => setState(() => _hoveredEventIndex = i),
-                  onExit: (_) => setState(() => _hoveredEventIndex = null),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    transform: Matrix4.identity()..scale(isHovered ? 1.01 : 1.0),
-                    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-                    child: ListTile(
-                      leading: Container(width: 8, decoration: BoxDecoration(color: accent, borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)))),
-                      title: Text(event['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text('${regs.length}/${limit > 0 ? limit : "∞"} registrations'),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(
-                          icon: const Icon(Icons.how_to_reg),
-                          onPressed: () {
-                            showDialog(context: context, builder: (ctx) => RegistrationDialog(
-                              eventId: event['id']!,
-                              users: _users,
-                              registered: regs,
-                              limit: limit,
-                              onSave: (newSet) => setState(() => _eventRegistrations[event['id']!] = newSet),
-                            ));
-                          },
-                        ),
-                        IconButton(icon: const Icon(Icons.delete), onPressed: () {
-                          setState(() {
-                            _eventRegistrations.remove(event['id']);
-                            _events.removeAt(i);
-                          });
-                        }),
-                      ]),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ]),
-    );
-  }
 
   Widget _buildUsers() {
     final rollCtrl = TextEditingController();
@@ -444,9 +393,6 @@ class _AdminHomeState extends State<AdminHome> {
                         final id = user['id']!;
                         setState(() {
                           _users.removeAt(i);
-                          for (final key in _eventRegistrations.keys) {
-                            _eventRegistrations[key]!.remove(id);
-                          }
                         });
                       }),
                     ),
@@ -460,7 +406,6 @@ class _AdminHomeState extends State<AdminHome> {
     );
   }
 
-  // use admin-profile variant you saved previously (profile page file)
   Widget _buildProfile() {
     return AdminProfilePage(
       isDark: widget.isDark,
@@ -470,7 +415,7 @@ class _AdminHomeState extends State<AdminHome> {
       initialDeptSection: 'Admin',
       initialPhotoUrl: uploadedImage,
       onChangePhoto: _changeProfileImage,
-      onChangePassword: (ctx) => _changePassword(ctx), // <-- now matches ValueChanged<BuildContext>
+      onChangePassword: (ctx) => _changePassword(ctx),
       onLogout: _logout,
       onUpdateName: (n) => setState(() => _adminName = n),
       onUpdateEmail: (e) { /* keep same */ },
@@ -516,7 +461,10 @@ class _AdminHomeState extends State<AdminHome> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: InkWell(
-            onTap: () { Navigator.of(context).pop(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logged out (demo)'))); },
+            onTap: () { 
+              Navigator.of(context).pop(); 
+              _logout();
+            },
             borderRadius: BorderRadius.circular(10),
             child: Container(
               decoration: BoxDecoration(color: widget.isDark ? Colors.red.withOpacity(.08) : Colors.red.withOpacity(.06), borderRadius: BorderRadius.circular(10)),
@@ -538,7 +486,6 @@ class _AdminHomeState extends State<AdminHome> {
         IconButton(icon: const Icon(Icons.menu, color: Colors.white), onPressed: () => _scaffoldKey.currentState?.openDrawer()),
         const SizedBox(width: 8),
         const Expanded(child: Center(child: Text('Your University Name', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)))),
-        // Keep AppBar theme toggle available
         IconButton(icon: Icon(widget.isDark ? Icons.dark_mode : Icons.light_mode, color: Colors.white), onPressed: () => widget.onThemeChanged(!widget.isDark), tooltip: 'Toggle theme'),
       ]),
       centerTitle: true,
@@ -547,7 +494,13 @@ class _AdminHomeState extends State<AdminHome> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [_buildHome(), _buildTimetable(), _buildEvents(), _buildUsers(), _buildProfile()];
+    final pages = [
+      _buildHome(), 
+      _buildTimetable(), 
+      const EventHandlerPage(), // <--- REPLACED: Connects to full Event Management
+      _buildUsers(), 
+      _buildProfile()
+    ];
 
     return Scaffold(
       key: _scaffoldKey,
@@ -558,7 +511,6 @@ class _AdminHomeState extends State<AdminHome> {
         child: SizedBox(key: ValueKey(_currentIndex), height: double.infinity, child: pages[_currentIndex]),
       ),
 
-      // footer with background, rounded top corners and shadow (kept visible)
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: widget.isDark ? Colors.grey.shade900.withOpacity(0.92) : Colors.white.withOpacity(0.95),
@@ -576,17 +528,16 @@ class _AdminHomeState extends State<AdminHome> {
               if (i == 2) _currentIndex = 4;
             });
           },
-          items: [
-            BottomNavigationBarItem(icon: CircleAvatar(radius: 15, backgroundColor: _paletteColor(0), child: const Icon(Icons.home, size: 22, color: Colors.white)), label: 'Home'),
-            BottomNavigationBarItem(icon: CircleAvatar(radius: 15, backgroundColor: _paletteColor(2), child: const Icon(Icons.event, size: 22, color: Colors.white)), label: 'Events'),
-            BottomNavigationBarItem(icon: CircleAvatar(radius: 15, backgroundColor: _paletteColor(4), child: const Icon(Icons.person, size: 22, color: Colors.white)), label: 'Profile'),
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home, size: 26), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.event, size: 26), label: 'Events'),
+            BottomNavigationBarItem(icon: Icon(Icons.person, size: 26), label: 'Profile'),
           ],
         ),
       ),
     );
   }
 
-  // helper to create ImageProvider for network or local file
   ImageProvider _imageProviderFor(String url) {
     if (url.startsWith('file://') && !kIsWeb) {
       try {
@@ -600,9 +551,7 @@ class _AdminHomeState extends State<AdminHome> {
     }
   }
 
-  // admin helper actions (existing logic kept)
   void _changeProfileImage() {
-    // existing admin behavior (kept)
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile photo updated (admin handler)')));
   }
 
@@ -614,90 +563,43 @@ class _AdminHomeState extends State<AdminHome> {
   }
 
   void _logout() async {
-    final ok = await showDialog<bool>(context: context, builder: (dCtx) => AlertDialog(title: const Text('Log out?'), content: const Text('Are you sure you want to sign out of this device?'), actions: [TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')), ElevatedButton(onPressed: () => Navigator.pop(dCtx, true), child: const Text('Log out'))]));
-    if (ok == true) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logged out')));
-  }
-}
-
-/// Registration dialog
-class RegistrationDialog extends StatefulWidget {
-  final String eventId;
-  final List<Map<String, String>> users;
-  final Set<String> registered;
-  final int limit;
-  final ValueChanged<Set<String>> onSave;
-
-  const RegistrationDialog({Key? key, required this.eventId, required this.users, required this.registered, required this.limit, required this.onSave}) : super(key: key);
-
-  @override
-  State<RegistrationDialog> createState() => _RegistrationDialogState();
-}
-
-class _RegistrationDialogState extends State<RegistrationDialog> {
-  late Set<String> _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = Set<String>.from(widget.registered);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final remaining = widget.limit > 0 ? widget.limit - _selected.length : null;
-    return AlertDialog(
-      title: Text('Manage Registrations (${widget.eventId})'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (widget.limit > 0)
-            Padding(padding: const EdgeInsets.only(bottom: 8.0), child: Text('Limit: ${widget.limit} — Selected: ${_selected.length} — Remaining: ${remaining! >= 0 ? remaining : 0}'))
-          else
-            const Padding(padding: EdgeInsets.only(bottom: 8.0), child: Text('No registration limit (∞)')),
-          Expanded(
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: widget.users.length,
-              itemBuilder: (ctx, i) {
-                final u = widget.users[i];
-                final uid = u['id']!;
-                final roll = u['roll'] ?? '';
-                final checked = _selected.contains(uid);
-                return CheckboxListTile(
-                  value: checked,
-                  title: Text(roll),
-                  onChanged: (val) {
-                    if (val == true) {
-                      if (widget.limit > 0 && _selected.length >= widget.limit) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registration limit reached')));
-                        return;
-                      }
-                      setState(() => _selected.add(uid));
-                    } else {
-                      setState(() => _selected.remove(uid));
-                    }
-                  },
-                );
-              },
+    final ok = await showDialog<bool>(
+      context: context, 
+      builder: (dCtx) => AlertDialog(
+        title: const Text('Log out?'), 
+        content: const Text('Are you sure you want to sign out?'), 
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx, false), 
+            child: const Text('Cancel')
+          ), 
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
             ),
-          ),
-        ]),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        ElevatedButton(onPressed: () {
-          widget.onSave(_selected);
-          Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registrations updated (demo)')));
-
-        }, child: const Text('Save')),
-      ],
+            onPressed: () => Navigator.pop(dCtx, true), 
+            child: const Text('Log out')
+          )
+        ]
+      )
     );
+    
+    if (ok == true && mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => LoginPage(
+            onToggleTheme: (val) {}, 
+            isDark: widget.isDark
+          )
+        ),
+        (route) => false,
+      );
+    }
   }
 }
 
 /// AdminProfilePage
-/// This is the profile page you saved as the "admin profile page".
 class AdminProfilePage extends StatefulWidget {
   final bool isDark;
   final ValueChanged<bool> onToggleTheme;
@@ -706,9 +608,8 @@ class AdminProfilePage extends StatefulWidget {
   final String initialDeptSection;
   final String initialPhotoUrl;
 
-  // additional callbacks (will be used if provided)
   final VoidCallback? onChangePhoto;
-  final ValueChanged<BuildContext>? onChangePassword; // <-- changed to accept BuildContext
+  final ValueChanged<BuildContext>? onChangePassword;
   final VoidCallback? onLogout;
   final ValueChanged<String>? onUpdateName;
   final ValueChanged<String>? onUpdateEmail;
@@ -769,7 +670,6 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
           const SizedBox(width: 8),
           ElevatedButton(
             onPressed: () {
-              // preserve existing logic but call callback if provided
               if (widget.onChangePhoto != null) widget.onChangePhoto!();
               setState(() { profileImage = 'https://images.unsplash.com/photo-1525973132219-a04334a76080?auto=format&fit=crop&w=800&q=80'; });
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile photo updated')));
@@ -794,7 +694,6 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
             _divider(),
             _settingTile(icon: Icons.email, title: 'Email', subtitle: userEmail, onTap: () => _editTextField(context, title: 'Edit Email', initial: userEmail, keyboardType: TextInputType.emailAddress, onSave: (v) { setState(() => userEmail = v); widget.onUpdateEmail?.call(v); })),
             _divider(),
-            // THEME TOGGLE INSIDE PROFILE
             SwitchListTile(
               secondary: const Icon(Icons.brightness_6),
               title: const Text('Dark Mode'),
@@ -808,7 +707,6 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
           const SizedBox(height: 12),
           Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), child: Column(children: [
             _settingTile(icon: Icons.lock, title: 'Change Password', subtitle: 'Update your password', onTap: () {
-              // call the provided handler with the BuildContext so admin logic can show dialogs
               widget.onChangePassword?.call(context);
               _changePassword(context);
             }),
@@ -848,7 +746,6 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
     if (ok == true) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logged out')));
   }
 
-  // ImageProvider helper reused in profile
   ImageProvider _imageProviderFor(String url) {
     if (url.startsWith('file://') && !kIsWeb) {
       try {

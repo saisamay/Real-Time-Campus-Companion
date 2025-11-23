@@ -167,7 +167,7 @@ class ApiService {
     );
     final url = Uri.parse('$baseUrl/api/timetable/search?${q.query}');
     final res = await http.get(url, headers: await _headers(auth: true));
-    
+
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       return Timetable.fromJson(data);
@@ -263,6 +263,7 @@ class ApiService {
     required DateTime date,
     required String imageUrl,
     required List<String> regulations,
+    required String registrationLink, // <--- 1. Add this parameter
   }) async {
     final url = Uri.parse('$baseUrl/api/events');
     final res = await http.post(
@@ -274,6 +275,8 @@ class ApiService {
         'date': date.toIso8601String(),
         'imageUrl': imageUrl,
         'regulations': regulations,
+        'registrationLink':
+            registrationLink, // <--- 2. Send it in the JSON body
       }),
     );
 
@@ -295,6 +298,7 @@ class ApiService {
     required DateTime date,
     required String imageUrl,
     required List<String> regulations,
+    required String registrationLink, // <--- 1. Add this parameter
   }) async {
     final url = Uri.parse('$baseUrl/api/events/$eventId');
     final res = await http.put(
@@ -306,6 +310,7 @@ class ApiService {
         'date': date.toIso8601String(),
         'imageUrl': imageUrl,
         'regulations': regulations,
+        'registrationLink': registrationLink, // <--- 2. Send it here
       }),
     );
 
@@ -328,61 +333,6 @@ class ApiService {
       final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
       throw Exception(
         body['error'] ?? 'Failed to delete event (${res.statusCode})',
-      );
-    }
-  }
-
-  // Register for an event
-  static Future<Map<String, dynamic>> registerForEvent({
-    required String eventId,
-    required String studentName,
-    required String studentEmail,
-    required String rollNo,
-    required String branch,
-    required String section,
-    String? phoneNumber,
-  }) async {
-    final url = Uri.parse('$baseUrl/api/events/$eventId/register');
-    final res = await http.post(
-      url,
-      headers: await _headers(auth: true),
-      body: jsonEncode({
-        'studentName': studentName,
-        'studentEmail': studentEmail,
-        'rollNo': rollNo,
-        'branch': branch,
-        'section': section,
-        'phoneNumber': phoneNumber,
-      }),
-    );
-
-    if (res.statusCode == 200 || res.statusCode == 201) {
-      return jsonDecode(res.body) as Map<String, dynamic>;
-    } else {
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
-      throw Exception(
-        body['error'] ?? 'Failed to register for event (${res.statusCode})',
-      );
-    }
-  }
-
-  // Get registrations for an event (admin/teacher only)
-  static Future<List<Map<String, dynamic>>> getEventRegistrations(
-    String eventId,
-  ) async {
-    final url = Uri.parse('$baseUrl/api/events/$eventId/registrations');
-    final res = await http.get(url, headers: await _headers(auth: true));
-
-    if (res.statusCode == 200) {
-      final body = jsonDecode(res.body);
-      if (body['registrations'] != null) {
-        return List<Map<String, dynamic>>.from(body['registrations']);
-      }
-      return [];
-    } else {
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
-      throw Exception(
-        body['error'] ?? 'Failed to fetch registrations (${res.statusCode})',
       );
     }
   }
