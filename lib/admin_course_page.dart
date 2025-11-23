@@ -151,13 +151,15 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
   }
 
   // NEW: Delete Course Logic
+  // In lib/admin_course_page.dart
+
   Future<void> _deleteCourse(String courseId) async {
     // Show Confirmation Dialog
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Course'),
-        content: const Text('Are you sure you want to delete this course? This action cannot be undone.'),
+        content: const Text('Are you sure you want to delete this course?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -174,13 +176,18 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
+        // FIX 1: Use ApiService instead of 'http' directly
         await ApiService.deleteCourse(courseId);
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Course deleted successfully'), backgroundColor: Colors.green),
           );
         }
-        _fetchCourses(); // Refresh the list
+
+        // FIX 2: Call the correct method name (with underscore)
+        _fetchCourses();
+
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -192,7 +199,6 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
       }
     }
   }
-
   // --- Helpers ---
 
   ImageProvider? _getImageProvider(String? url) {
