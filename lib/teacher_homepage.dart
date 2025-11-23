@@ -1,6 +1,10 @@
-// lib/teacher_homepage.dart
 import 'package:flutter/material.dart';
-import 'main.dart'; // for LoginPage navigation
+import 'dart:math' as math; // Required for custom painters
+import 'main.dart'; // Required for LoginPage navigation
+import 'student_timetable_page.dart'; // Required for StudentTimetablePage
+import 'emptyclassrooms_page.dart'; // Required for EmptyClassroomsPage
+import 'api_service.dart'; // Required for fetching data
+import 'timetable_model.dart'; // Required for Timetable models
 
 class TeacherHomePage extends StatelessWidget {
   final String universityName;
@@ -20,7 +24,6 @@ class TeacherHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The actual UI is implemented in TeachersHome (stateful).
     return TeachersHome(
       universityName: universityName,
       isDark: isDark,
@@ -31,7 +34,6 @@ class TeacherHomePage extends StatelessWidget {
   }
 }
 
-// ----------------------- TEACHERS HOME (stateful) -----------------------
 class TeachersHome extends StatefulWidget {
   final String universityName;
   final bool isDark;
@@ -52,17 +54,65 @@ class TeachersHome extends StatefulWidget {
   State<TeachersHome> createState() => _TeachersHomeState();
 }
 
-class _TeachersHomeState extends State<TeachersHome> {
-  int _index = 0;
+class _TeachersHomeState extends State<TeachersHome>
+    with TickerProviderStateMixin {
+  int _currentIndex = 0;
   late PageController _pageController;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Profile info (initialized from widget)
+  // Profile info
   late String teacherName;
   late String teacherEmail;
   String department = 'CSE';
   String cabin = 'Block A - 305';
+  String profileImage = 'https://i.pravatar.cc/150?img=5';
 
-  // timetable slots & data
+  // Local state
+  late bool _localIsDark;
+  bool _isAvailable = true;
+
+  // --- Dynamic Timetable State ---
+  bool _isTimetableLoading = true;
+  List<TimetableDay> _timetableGrid = [];
+  final List<String> _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+  // --- ANIMATION CONTROLLERS FOR PROFILE ---
+  late AnimationController _headerController;
+  late AnimationController _cardsController;
+  late AnimationController _pulseController;
+  late Animation<double> _headerScale;
+  late Animation<double> _headerFade;
+  late Animation<double> _pulseAnimation;
+  late List<Animation<double>> _cardSlides;
+
+  // Admin-style Color Palette
+  List<Color> get _palette => [
+    const Color(0xFF0D6EFD), // blue
+    const Color(0xFF20C997), // teal
+    const Color(0xFFFFA927), // orange
+    const Color(0xFF8A63D2), // purple
+    const Color(0xFFEF476F), // pink/red
+  ];
+
+  Color _paletteColor(int index, {double opacity = 1.0}) {
+    final base = _palette[index % _palette.length];
+    return base.withOpacity(opacity);
+  }
+
+  // Helper for Gradient (Adapts to Dark Mode)
+  LinearGradient get _headerGradient => _localIsDark
+      ? const LinearGradient(
+    colors: [Color(0xFF1F1F1F), Color(0xFF121212)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  )
+      : const LinearGradient(
+    colors: [Color(0xFF0D6EFD), Color(0xFF20C997)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // Time Slots Data
   final List<Map<String, String>> slots = [
     {'no': '1', 'time': '09:00'},
     {'no': '2', 'time': '09:50'},
@@ -75,6 +125,7 @@ class _TeachersHomeState extends State<TeachersHome> {
     {'no': '9', 'time': '16:00'},
   ];
 
+  // Local timetable fallback for NextClassCard calculation
   Map<String, List<Map<String, String>>> teacherTimetable = {
     'Mon': [
       {'sub': 'Research', 'room': '', 'section': ''},
@@ -136,590 +187,1648 @@ class _TeachersHomeState extends State<TeachersHome> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _index);
+    _pageController = PageController(initialPage: _currentIndex);
     teacherName = widget.userName.isNotEmpty ? widget.userName : 'Dr. Sharma';
-    teacherEmail = widget.userEmail.isNotEmpty ? widget.userEmail : 'dr.sharma@university.edu';
+    teacherEmail = widget.userEmail.isNotEmpty
+        ? widget.userEmail
+        : 'dr.sharma@university.edu';
+    _localIsDark = widget.isDark;
+    _calculateInitialAvailability();
+
+    // Initialize dynamic timetable
+    _loadTimetableData();
+
+    // --- INITIALIZE ANIMATIONS ---
+    _headerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _cardsController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    );
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+
+    _headerScale = Tween<double>(begin: 0.9, end: 1.0).animate(
+      CurvedAnimation(parent: _headerController, curve: Curves.easeOutBack),
+    );
+
+    _headerFade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _headerController, curve: Curves.easeIn));
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    // We have 6 items in the profile list
+    _cardSlides = List.generate(6, (i) {
+      return Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _cardsController,
+          curve: Interval(i * 0.1, 0.5 + (i * 0.1), curve: Curves.easeOutCubic),
+        ),
+      );
+    });
+
+    _headerController.forward();
+    _cardsController.forward();
   }
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  // --- DATA LOADING ---
+  Future<void> _loadTimetableData() async {
+    try {
+      final grid = await ApiService.getTeacherTimetable();
+      if (mounted) {
+        setState(() {
+          _timetableGrid = grid;
+          _isTimetableLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isTimetableLoading = false);
+      }
+    }
   }
 
-  void _goToPage(int index) {
-    setState(() => _index = index);
-    _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  // --- UPDATE SLOT LOGIC ---
+  Future<void> _updateSlot(String contextStr, String day, int index,
+      bool isCancelled, String? newRoom) async {
+    try {
+      final parts = contextStr.split(' ');
+      if (parts.length < 3) return;
+
+      await ApiService.updateSlot(
+        branch: parts[0],
+        semester: parts[1],
+        section: parts[2],
+        dayName: day,
+        slotIndex: index,
+        isCancelled: isCancelled,
+        newRoom: newRoom,
+      );
+
+      Navigator.pop(context);
+      _loadTimetableData(); // Refresh
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Updated!'), backgroundColor: Colors.green));
+    } catch (e) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed: $e'), backgroundColor: Colors.red));
+    }
   }
 
-  void _openQuickSearch(BuildContext ctx) {
+  void _showSlotDetails(TimetableSlot slot, String day, int index) {
+    final roomCtrl = TextEditingController(text: slot.newRoom ?? slot.room);
+
     showModalBottomSheet(
-      context: ctx,
+      context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (bCtx) => Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(bCtx).viewInsets.bottom + 16),
-        child: TextField(
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Search anything…', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
-          onSubmitted: (q) {
-            Navigator.pop(bCtx);
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Searching for: $q')));
-          },
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Class: ${slot.displayContext}',
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueAccent)),
+            const SizedBox(height: 5),
+            Text(slot.courseName, style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 15),
+
+            // Teacher Controls
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Cancel Class'),
+              value: slot.isCancelled,
+              activeColor: Colors.red,
+              onChanged: (val) =>
+                  _updateSlot(slot.displayContext, day, index, val, null),
+            ),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: roomCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Change Room', border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton(
+                  onPressed: () => _updateSlot(slot.displayContext, day, index,
+                      slot.isCancelled, roomCtrl.text),
+                  child: const Text('Update'),
+                )
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  void _updateTimetableCell(String day, int slotIndex, String subject, String room) {
-    setState(() {
-      final list = teacherTimetable[day]!;
-      list[slotIndex] = {'sub': subject.trim(), 'room': room.trim(), 'section': list[slotIndex]['section'] ?? ''};
-    });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Timetable updated')));
+  void _calculateInitialAvailability() {
+    final now = DateTime.now();
+    if (now.weekday > 5) {
+      _isAvailable = true;
+      return;
+    }
+    final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    final dayName = weekdays[now.weekday - 1];
+    final daySchedule = teacherTimetable[dayName];
+    if (daySchedule == null) {
+      _isAvailable = true;
+      return;
+    }
+
+    int currentMinutes = now.hour * 60 + now.minute;
+    bool isBusy = false;
+    for (var i = 0; i < slots.length; i++) {
+      int start = _toMinutes(slots[i]['time']!);
+      int end = start + 50;
+      if (currentMinutes >= start && currentMinutes < end) {
+        final sub = daySchedule[i]['sub'] ?? '';
+        if (sub.isNotEmpty && sub != 'Lunch' && sub != 'Research') {
+          isBusy = true;
+          break;
+        }
+      }
+    }
+    _isAvailable = !isBusy;
+  }
+
+  int _toMinutes(String hhmm) {
+    final p = hhmm.split(':');
+    final h = int.tryParse(p[0]) ?? 0;
+    final m = int.tryParse(p[1]) ?? 0;
+    return h * 60 + m;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  void didUpdateWidget(covariant TeachersHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isDark != widget.isDark) {
+      setState(() => _localIsDark = widget.isDark);
+    }
+  }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.universityName),
-        leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
-        actions: [
-          Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.search), onPressed: () => _openQuickSearch(ctx), tooltip: 'Search')),
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _headerController.dispose();
+    _cardsController.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  void _goToPage(int index) {
+    setState(() => _currentIndex = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+
+    if (index == 3) {
+      _headerController.reset();
+      _cardsController.reset();
+      _headerController.forward();
+      _cardsController.forward();
+    }
+  }
+
+  AppBar _buildAppBar() {
+    return AppBar(
+      automaticallyImplyLeading: false,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      flexibleSpace: Container(
+        decoration: BoxDecoration(gradient: _headerGradient),
+      ),
+      title: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white, size: 26),
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
           const SizedBox(width: 8),
+          const Expanded(
+            child: Center(
+              child: Text(
+                'Teacher Dashboard',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.brightness_medium,
+              color: Colors.white,
+              size: 26,
+            ),
+            onPressed: () {
+              setState(() => _localIsDark = !_localIsDark);
+              widget.onToggleTheme(_localIsDark);
+            },
+            tooltip: 'Toggle theme',
+          ),
         ],
       ),
+      centerTitle: true,
+    );
+  }
 
-      drawer: Drawer(
-        child: ListView(
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: scheme.primary),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const CircleAvatar(radius: 28, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=5")),
-                const SizedBox(height: 12),
-                Text(teacherName, style: TextStyle(color: scheme.onPrimary, fontSize: 18)),
-                Text(teacherEmail, style: TextStyle(color: scheme.onPrimary.withOpacity(.8), fontSize: 14)),
-              ]),
+  Drawer _buildDrawer() {
+    Widget menuItem({
+      required int index,
+      required IconData icon,
+      required String label,
+    }) {
+      final color = _paletteColor(index);
+      final tileBg = _currentIndex == index
+          ? _paletteColor(index, opacity: _localIsDark ? 0.18 : 0.12)
+          : Colors.transparent;
+      final iconColor = _localIsDark ? Colors.white : color;
+      final textColor = _localIsDark ? Colors.white : Colors.black87;
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6),
+        child: Container(
+          decoration: BoxDecoration(
+            color: tileBg,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: ListTile(
+            leading: Container(
+              width: 6,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(6),
+              ),
             ),
-            ListTile(leading: const Icon(Icons.home), title: const Text('Home'), onTap: () { Navigator.pop(context); _goToPage(0); }),
-            ListTile(leading: const Icon(Icons.meeting_room), title: const Text('Classrooms'), onTap: () { Navigator.pop(context); _goToPage(1); }),
-            ListTile(leading: const Icon(Icons.person), title: const Text('Profile'), onTap: () { Navigator.pop(context); _goToPage(2); }),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Logout'),
+            title: Text(
+              label,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
+            ),
+            trailing: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: _localIsDark
+                    ? const Color(0xFF1F1F1F)
+                    : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: iconColor, size: 18),
+            ),
+            onTap: () {
+              Navigator.of(context).pop();
+              _goToPage(index);
+            },
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Drawer(
+      backgroundColor: _localIsDark ? Colors.grey.shade900 : Colors.white,
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(gradient: _headerGradient),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundImage: NetworkImage(profileImage),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  teacherName,
+                  style: const TextStyle(fontSize: 18, color: Colors.white),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Faculty Member',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+          menuItem(index: 0, icon: Icons.home, label: 'Home'),
+          menuItem(index: 2, icon: Icons.meeting_room, label: 'Classrooms'),
+          menuItem(index: 3, icon: Icons.person, label: 'Profile'),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: InkWell(
               onTap: () {
-                Navigator.pop(context); // close drawer
+                Navigator.of(context).pop();
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(
                     builder: (_) => LoginPage(
-                      isDark: widget.isDark,
+                      isDark: _localIsDark,
                       onToggleTheme: widget.onToggleTheme,
                     ),
                   ),
                       (route) => false,
                 );
               },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _localIsDark
+                      ? Colors.red.withOpacity(0.08)
+                      : Colors.red.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 6,
+                    height: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  title: Text(
+                    'Logout',
+                    style: TextStyle(
+                      color: _localIsDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: _localIsDark
+                          ? const Color(0xFF1F1F1F)
+                          : Colors.red.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.logout,
+                      color: _localIsDark ? Colors.white : Colors.redAccent,
+                      size: 18,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
             ),
-          ],
-        ),
-      ),
-
-      body: PageView(controller: _pageController, onPageChanged: (i) => setState(() => _index = i), children: [_teacherHome(context), const ClassroomsPage(), _teacherProfile(context)]),
-
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _goToPage,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.meeting_room), label: 'Classrooms'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+          ),
         ],
       ),
     );
   }
 
-  // ---------------- TEACHER HOME ----------------
-  Widget _teacherHome(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Card(
-            elevation: 3,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Weekly Timetable', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                TeacherTimetableWidget(timetable: teacherTimetable, slots: slots),
-              ]),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: NextClassCard(timetable: teacherTimetable, slots: slots)),
-
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-
-  // ---------------- TEACHER PROFILE ----------------
-  Widget _teacherProfile(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return ListView(
-      children: [
-        Container(
-          height: 180,
-          decoration: BoxDecoration(gradient: LinearGradient(colors: [cs.primary, cs.secondary], begin: Alignment.topLeft, end: Alignment.bottomRight)),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(children: [
-                const CircleAvatar(radius: 40, backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=5")),
-                const SizedBox(width: 16),
-                Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(teacherName, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w800, fontSize: 20)),
-                  const SizedBox(height: 6),
-                  Wrap(spacing: 8, runSpacing: 8, children: [
-                    _chip(context, department, Icons.badge),
-                    _chip(context, cabin, Icons.location_city),
-                    _chip(context, teacherEmail, Icons.email),
-                  ]),
-                ])),
-              ]),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Wrap(spacing: 12, runSpacing: 12, children: [
-            _actionTile(context, icon: Icons.edit, label: 'Edit Name', onTap: () async {
-              final ctrl = TextEditingController(text: teacherName);
-              await showDialog(context: context, builder: (_) => AlertDialog(
-                title: const Text('Edit Name'),
-                content: TextField(controller: ctrl, decoration: const InputDecoration(border: OutlineInputBorder())),
-                actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () { setState(() => teacherName = ctrl.text.trim().isNotEmpty ? ctrl.text.trim() : teacherName); Navigator.pop(context); }, child: const Text('Save'))],
-              ));
-            }),
-            _actionTile(context, icon: Icons.email, label: 'Edit Email', onTap: () async {
-              final ctrl = TextEditingController(text: teacherEmail);
-              await showDialog(context: context, builder: (_) => AlertDialog(
-                title: const Text('Edit Email'),
-                content: TextField(controller: ctrl, decoration: const InputDecoration(border: OutlineInputBorder())),
-                actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () { setState(() => teacherEmail = ctrl.text.trim().isNotEmpty ? ctrl.text.trim() : teacherEmail); Navigator.pop(context); }, child: const Text('Save'))],
-              ));
-            }),
-            _actionTile(context, icon: Icons.home_work, label: 'Edit Cabin', onTap: () async {
-              final ctrl = TextEditingController(text: cabin);
-              await showDialog(context: context, builder: (_) => AlertDialog(
-                title: const Text('Edit Cabin'),
-                content: TextField(controller: ctrl, decoration: const InputDecoration(border: OutlineInputBorder())),
-                actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () { setState(() => cabin = ctrl.text.trim().isNotEmpty ? ctrl.text.trim() : cabin); Navigator.pop(context); }, child: const Text('Save'))],
-              ));
-            }),
-            _actionTile(context, icon: Icons.event, label: 'Edit Timetable', onTap: () async { await _openTimetableEditor(context); }),
-            _actionTile(context, icon: Icons.brightness_6, label: widget.isDark ? 'Light Mode' : 'Dark Mode', onTap: () => widget.onToggleTheme(!widget.isDark)),
-          ]),
-        ),
-
-        const SizedBox(height: 12),
-      ],
-    );
-  }
-
-  Widget _chip(BuildContext context, String text, IconData icon) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: cs.primaryContainer.withOpacity(0.9), borderRadius: BorderRadius.circular(999)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 16, color: cs.onPrimaryContainer), const SizedBox(width: 6), Text(text, style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.w600))]),
-    );
-  }
-
-  Widget _actionTile(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: (MediaQuery.of(context).size.width - 12 * 3) / 2,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(blurRadius: 8, color: Colors.black.withOpacity(0.06), offset: const Offset(0, 3))]),
-        child: Row(children: [Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: cs.onPrimaryContainer)), const SizedBox(width: 12), Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700))), const Icon(Icons.chevron_right)]),
-      ),
-    );
-  }
-
-  // Timetable editor
-  Future<void> _openTimetableEditor(BuildContext context) async {
-    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-    String selectedDay = days.first;
-    int selectedSlot = 0;
-    final subjectCtrl = TextEditingController();
-    final roomCtrl = TextEditingController();
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (bCtx) {
-        return Padding(
-          padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(bCtx).viewInsets.bottom + 16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(bCtx).dividerColor, borderRadius: BorderRadius.circular(999)))]),
-            const SizedBox(height: 12),
-            const Text('Edit Timetable', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16), textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            StatefulBuilder(builder: (ctx, setStateSB) {
-              return Column(children: [
-                DropdownButtonFormField<String>(
-                  value: selectedDay,
-                  decoration: const InputDecoration(labelText: 'Day', border: OutlineInputBorder()),
-                  items: days.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-                  onChanged: (v) { if (v != null) setStateSB(() => selectedDay = v); },
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<int>(
-                  value: selectedSlot,
-                  decoration: const InputDecoration(labelText: 'Slot (index starts 0)', border: OutlineInputBorder()),
-                  items: List.generate(slots.length, (i) => DropdownMenuItem(value: i, child: Text('${i + 1} — ${slots[i]['time']}'))),
-                  onChanged: (v) { if (v != null) setStateSB(() => selectedSlot = v); },
-                ),
-              ]);
-            }),
-            const SizedBox(height: 8),
-            TextField(controller: subjectCtrl, decoration: const InputDecoration(labelText: 'Subject', border: OutlineInputBorder())),
-            const SizedBox(height: 8),
-            TextField(controller: roomCtrl, decoration: const InputDecoration(labelText: 'Room', border: OutlineInputBorder())),
-            const SizedBox(height: 12),
-            Row(children: [Expanded(child: FilledButton(onPressed: () {
-              final sub = subjectCtrl.text.trim();
-              final room = roomCtrl.text.trim();
-              if (sub.isEmpty && room.isEmpty) { Navigator.pop(bCtx); return; }
-              _updateTimetableCell(selectedDay, selectedSlot, sub, room);
-              Navigator.pop(bCtx);
-            }, child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Save'))))])
-          ]),
-        );
-      },
-    );
-  }
-}
-
-// ------------------ CLASSROOMS PAGE (stateful) ------------------
-class ClassroomsPage extends StatefulWidget {
-  const ClassroomsPage({super.key});
-
-  @override
-  State<ClassroomsPage> createState() => _ClassroomsPageState();
-}
-
-class _ClassroomsPageState extends State<ClassroomsPage> {
-  final Map<String, bool?> _roomStatus = {};
-  final Map<String, String> _roomTypeOverride = {};
-
-  String _filterType = 'Class';
-  String _filterFloor = 'Ground';
-  String _filterOccupancy = 'All';
-
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    var rooms = _generateRoomsExclusive(_filterType, _filterFloor);
-    rooms = rooms.where((r) {
-      final status = _roomStatus[r['name']!];
-      if (_filterOccupancy == 'All') return true;
-      if (_filterOccupancy == 'Occupied') return status == true;
-      if (_filterOccupancy == 'Not occupied') return status == false;
-      return true;
-    }).toList();
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Classrooms')),
-      body: Column(children: [
-        const SizedBox(height: 10),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _ResponsiveFilters(type: _filterType, floor: _filterFloor, occ: _filterOccupancy, onType: (v) => setState(() => _filterType = v), onFloor: (v) => setState(() => _filterFloor = v), onOcc: (v) => setState(() => _filterOccupancy = v))),
-
-        const SizedBox(height: 10),
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.all(12),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 4 / 3),
-            itemCount: rooms.length,
-            itemBuilder: (itemCtx, i) {
-              final r = rooms[i];
-              final name = r['name']!;
-              final type = r['type']!;
-              final floor = r['floor']!;
-              final wing = r['wing']!;
-              return InkWell(
-                onTap: () => _showOccupancySheet(context, name, r['base']!, type),
-                child: Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(fit: StackFit.expand, children: [
-                    Container(color: Colors.grey.shade200),
-                    Align(alignment: Alignment.topRight, child: Padding(padding: const EdgeInsets.all(8), child: _buildStatusPill(context, name))),
-                    Align(alignment: Alignment.bottomLeft, child: Padding(padding: const EdgeInsets.all(10), child: Text(name, style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w700)))),
-                    Align(alignment: Alignment.centerRight, child: Padding(padding: const EdgeInsets.all(10), child: Text('$type • $floor', style: TextStyle(color: scheme.onSurfaceVariant)))),
-                  ]),
-                ),
-              );
-            },
-          ),
-        ),
-      ]),
-    );
-  }
-
-  int _floorToInt(String floor) {
-    switch (floor) {
-      case 'Ground': return 0;
-      case 'First': return 1;
-      case 'Second': return 2;
-      case 'Third': return 3;
-      default: return 0;
-    }
-  }
-
-  String _defaultTypeForBase(String base) {
-    final digits = RegExp(r'\d+').firstMatch(base)?.group(0) ?? '0';
-    final last = int.parse(digits[digits.length - 1]);
-    return (last == 0 || last == 5) ? 'Lab' : 'Class';
-  }
-
-  List<Map<String, String>> _generateRoomsExclusive(String filterType, String floor) {
-    final floorNum = _floorToInt(floor);
-    final List<Map<String, String>> out = [];
-    for (final wing in ['N', 'S']) {
-      for (int i = 0; i <= 10; i++) {
-        final roomNum = "$floorNum${i.toString().padLeft(2, '0')}";
-        final base = '$wing$roomNum';
-        final assigned = _roomTypeOverride[base] ?? _defaultTypeForBase(base);
-        if (assigned == filterType) {
-          final visibleName = assigned == 'Lab' ? '${base}L' : base;
-          out.add({'name': visibleName, 'base': base, 'type': assigned, 'floor': floor, 'wing': wing});
-        }
-      }
-    }
-    out.sort((a, b) {
-      if (a['wing'] != b['wing']) return a['wing']!.compareTo(b['wing']!);
-      final na = int.parse(a['base']!.replaceAll(RegExp(r'[^0-9]'), ''));
-      final nb = int.parse(b['base']!.replaceAll(RegExp(r'[^0-9]'), ''));
-      return na.compareTo(nb);
-    });
-    return out;
-  }
-
-  void _showOccupancySheet(BuildContext ctx, String roomName, String base, String currentType) {
-    final assigned = _roomTypeOverride[base];
-    final effectiveType = assigned ?? currentType;
-    showModalBottomSheet(
-      context: ctx,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (bCtx) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(bCtx).dividerColor, borderRadius: BorderRadius.circular(999)))]),
-          const SizedBox(height: 16),
-          Text(roomName, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          const SizedBox(height: 4),
-          Text('Base: $base • Type: $effectiveType', textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: FilledButton.tonal(onPressed: () { setState(() => _roomStatus[roomName] = true); Navigator.pop(bCtx); ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Marked as Occupied'))); }, child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Occupied')))),
-            const SizedBox(width: 12),
-            Expanded(child: FilledButton(onPressed: () { setState(() => _roomStatus[roomName] = false); Navigator.pop(bCtx); ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Marked as Not occupied'))); }, child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Not occupied')))),
-          ]),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: OutlinedButton(onPressed: () { setState(() { _roomTypeOverride[base] = 'Class'; }); Navigator.pop(bCtx); ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$base set as Class'))); }, child: const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Set as Class')))),
-            const SizedBox(width: 12),
-            Expanded(child: OutlinedButton(onPressed: () { setState(() { _roomTypeOverride[base] = 'Lab'; }); Navigator.pop(bCtx); ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$base set as Lab'))); }, child: const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Set as Lab')))),
-          ]),
-        ]),
+      key: _scaffoldKey,
+      appBar: _buildAppBar(),
+      drawer: _buildDrawer(),
+      backgroundColor: _localIsDark
+          ? const Color(0xFF121212)
+          : Theme.of(context).scaffoldBackgroundColor,
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) => setState(() => _currentIndex = index),
+        children: [
+          _buildHome(),
+          const StudentTimetablePage(embedded: true),
+          const EmptyClassroomsPage(),
+          _teacherProfile(context),
+        ],
       ),
-    );
-  }
-
-  Widget _buildStatusPill(BuildContext context, String roomName) {
-    final cs = Theme.of(context).colorScheme;
-    final status = _roomStatus[roomName];
-    if (status == true) return _pill('Occupied', cs.errorContainer, cs.onErrorContainer);
-    if (status == false) return _pill('Not occupied', cs.primaryContainer, cs.onPrimaryContainer);
-    return _pill('Unknown', cs.surfaceVariant, cs.onSurfaceVariant);
-  }
-
-  Widget _pill(String label, Color bg, Color fg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999), boxShadow: [BoxShadow(blurRadius: 8, offset: const Offset(0, 2), color: Colors.black.withOpacity(.15))]),
-      child: Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: fg)),
-    );
-  }
-}
-
-// -------- Responsive Filters --------
-class _ResponsiveFilters extends StatelessWidget {
-  final String type, floor, occ;
-  final ValueChanged<String> onType, onFloor, onOcc;
-  const _ResponsiveFilters({super.key, required this.type, required this.floor, required this.occ, required this.onType, required this.onFloor, required this.onOcc});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (ctx, c) {
-      final w = c.maxWidth;
-      final cols = w >= 900 ? 3 : (w >= 600 ? 2 : 1);
-      final spacing = 12.0;
-      final itemW = (w - (spacing * (cols - 1))) / cols;
-      Widget box(Widget child) => SizedBox(width: itemW, child: child);
-
-      return Wrap(spacing: spacing, runSpacing: spacing, children: [
-        box(DropdownButtonFormField<String>(value: type, decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)), items: const ['Class', 'Lab'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(), onChanged: (v) => onType(v!))),
-        box(DropdownButtonFormField<String>(value: floor, decoration: const InputDecoration(labelText: 'Floor', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)), items: const ['Ground', 'First', 'Second', 'Third'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(), onChanged: (v) => onFloor(v!))),
-        box(DropdownButtonFormField<String>(value: occ, decoration: const InputDecoration(labelText: 'Filter', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)), items: const ['All', 'Occupied', 'Not occupied'].map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(), onChanged: (v) => onOcc(v!))),
-      ]);
-    });
-  }
-}
-
-// ====================== TEACHER TIMETABLE WIDGET (ROW = slot, COL = day) ======================
-// Replace your existing TeacherTimetableWidget with this version
-class TeacherTimetableWidget extends StatelessWidget {
-  final Map<String, List<Map<String, String>>> timetable;
-  final List<Map<String, String>> slots;
-  const TeacherTimetableWidget({super.key, required this.timetable, required this.slots});
-
-  // Same sections as before but more saturated / visible (non-transparent)
-  Color _colorForSection(String section) {
-    switch (section) {
-      case 'A': return const Color(0xFF8FD1FF); // stronger light blue
-      case 'B': return const Color(0xFFFFC8A8); // stronger peach
-      case 'C': return const Color(0xFF9FEFC0); // stronger green
-      case 'D': return const Color(0xFFD9C6FF); // stronger lavender
-      default: return Colors.grey.shade200;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-    final slotWidth = 90.0; // left column width for times
-
-    // Ensure each day's list has exactly slots.length entries (pad with empty)
-    Map<String, List<Map<String, String>>> padded = {};
-    for (final d in weekdays) {
-      final list = timetable[d] ?? [];
-      final padList = List<Map<String, String>>.from(list);
-      while (padList.length < slots.length) padList.add({'sub': '', 'room': '', 'section': ''});
-      padded[d] = padList;
-    }
-
-    // border color slightly visible on both themes
-    final borderColor = Theme.of(context).brightness == Brightness.dark ? Colors.white10 : Colors.black12;
-    final subjectTextColor = Colors.black87;
-    final roomTextColor = Colors.black54;
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Left column: slot index + time
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(width: slotWidth, height: 48, alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8), child: const Text('', style: TextStyle(fontWeight: FontWeight.bold))), // top-left blank
-                ...List.generate(slots.length, (i) {
-                  return Container(
-                    width: slotWidth,
-                    height: 64,
-                    margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: borderColor),
-                      borderRadius: BorderRadius.circular(6),
-                      color: Theme.of(context).colorScheme.surface,
-                    ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('(${slots[i]['no']})', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.65))),
-                      const SizedBox(height: 6),
-                      Text(slots[i]['time']!, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55))),
-                    ]),
-                  );
-                }),
-              ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: _localIsDark
+              ? Colors.grey.shade900.withOpacity(0.92)
+              : Colors.white.withOpacity(0.95),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(18),
+            topRight: Radius.circular(18),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
             ),
-
-            // For each day, a column of cells aligned with times
-            ...weekdays.map((day) {
-              final cells = padded[day]!;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(width: 150, height: 48, alignment: Alignment.center, padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(day, style: const TextStyle(fontWeight: FontWeight.bold))),
-                  ...List.generate(slots.length, (i) {
-                    final c = cells[i];
-                    final section = (c['section'] ?? '').trim();
-                    final filled = (c['sub'] ?? '').trim().isNotEmpty;
-                    final bg = filled ? _colorForSection(section) : Colors.white;
-                    return Container(
-                      width: 150,
-                      height: 64,
-                      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: borderColor),
-                        color: bg,
-                      ),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(
-                          c['sub'] ?? '',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: subjectTextColor),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          c['room'] ?? '',
-                          style: TextStyle(fontSize: 12, color: roomTextColor),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ]),
-                    );
-                  }),
-                ],
-              );
-            }).toList(),
+          ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          type: BottomNavigationBarType.fixed,
+          currentIndex: _currentIndex,
+          onTap: (i) => _goToPage(i),
+          selectedItemColor: _localIsDark ? Colors.white : Colors.black87,
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          showSelectedLabels: true,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home, size: 24),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_month, size: 24),
+              label: 'Student TT',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.meeting_room, size: 24),
+              label: 'Classrooms',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person, size: 24),
+              label: 'Profile',
+            ),
           ],
         ),
       ),
     );
   }
+
+  // --- HOME WIDGET ---
+  Widget _buildHome() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          Container(
+            height: 160,
+            decoration: BoxDecoration(
+              gradient: _headerGradient,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(24),
+                bottomRight: Radius.circular(24),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: SafeArea(
+              bottom: false,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 32,
+                    backgroundColor: Colors.white24,
+                    child:
+                    const Icon(Icons.school, size: 32, color: Colors.white),
+                  ),
+                  const SizedBox(width: 16),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Welcome back,',
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.95),
+                              fontSize: 14),
+                        ),
+                        Text(
+                          teacherName,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$department • $cabin',
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dashboard',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                CabinStatusCard(
+                  isAvailable: _isAvailable,
+                  onChanged: (val) {
+                    setState(() => _isAvailable = val);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content:
+                          Text(val ? 'Marked Available' : 'Marked Busy')),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                NextClassCard(timetable: teacherTimetable, slots: slots),
+                const SizedBox(height: 24),
+                Text(
+                  'Weekly Timetable',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+
+                // --- NEW GRID IMPLEMENTATION ---
+                _isTimetableLoading
+                    ? const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator()))
+                    : _timetableGrid.isEmpty
+                    ? const Center(
+                    child: Text('No timetable data available'))
+                    : _buildTimetableGrid(),
+                // -------------------------------
+
+                const SizedBox(height: 30),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- THE GRID WIDGET (Rows = Days, Cols = Slots) ---
+  Widget _buildTimetableGrid() {
+    // Create a Map for easy lookup: DayName -> List<TimetableSlot>
+    final Map<String, List<TimetableSlot>> gridMap = {};
+    for (var d in _timetableGrid) {
+      gridMap[d.dayName] = d.slots;
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. HEADER ROW (Time Slots)
+          Row(
+            children: [
+              // Top-left corner (Day label holder)
+              Container(width: 80),
+              // Time Columns
+              ...slots.map((s) => Container(
+                width: 120,
+                padding:
+                const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                      color: _localIsDark ? Colors.white12 : Colors.black12),
+                  borderRadius: BorderRadius.circular(6),
+                  color: _localIsDark ? const Color(0xFF252525) : Colors.white,
+                ),
+                child: Column(
+                  children: [
+                    Text(s['time']!,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: _localIsDark
+                                ? Colors.white70
+                                : Colors.black87)),
+                    const SizedBox(height: 4),
+                    Text('(${s['no']})',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _localIsDark
+                                ? Colors.white
+                                : Colors.black)),
+                  ],
+                ),
+              )),
+            ],
+          ),
+
+          // 2. DAY ROWS
+          ..._days.map((day) {
+            // Get slots for this day or fill with empty
+            final List<TimetableSlot> daySlots =
+                gridMap[day] ?? List.generate(9, (_) => TimetableSlot());
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Day Name Column (Left)
+                Container(
+                  width: 80,
+                  height: 100,
+                  margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _localIsDark
+                        ? const Color(0xFF252525)
+                        : Colors.grey.shade100,
+                    border: Border.all(
+                        color:
+                        _localIsDark ? Colors.white12 : Colors.black12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(day,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color:
+                          _localIsDark ? Colors.white : Colors.black87)),
+                ),
+
+                // Slot Cells
+                ...List.generate(9, (index) {
+                  final slot =
+                  daySlots.length > index ? daySlots[index] : TimetableSlot();
+                  final hasClass = slot.courseCode.isNotEmpty;
+
+                  // Styling
+                  Color bg = _localIsDark ? Colors.transparent : Colors.white;
+                  if (hasClass) {
+                    bg = _localIsDark
+                        ? Colors.blue.withOpacity(0.2)
+                        : Colors.blue.shade50;
+                  }
+                  if (slot.isCancelled) {
+                    bg = _localIsDark
+                        ? Colors.red.withOpacity(0.2)
+                        : Colors.red.shade50;
+                  }
+
+                  final borderColor =
+                  _localIsDark ? Colors.white12 : Colors.black12;
+
+                  return GestureDetector(
+                    onTap: hasClass ? () => _showSlotDetails(slot, day, index) : null,
+                    child: Container(
+                      width: 120,
+                      height: 100,
+                      margin:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: bg,
+                        border: Border.all(color: borderColor),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (hasClass) ...[
+                            Text(
+                              slot.displayContext,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _localIsDark
+                                      ? Colors.blue.shade200
+                                      : Colors.blue.shade800),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              slot.courseCode,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _localIsDark
+                                      ? Colors.white
+                                      : Colors.black87),
+                            ),
+                            if (slot.isCancelled) ...[
+                              const SizedBox(height: 4),
+                              const Text('CANCELLED',
+                                  style: TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold))
+                            ],
+                            if (slot.newRoom != null) ...[
+                              const SizedBox(height: 4),
+                              Text(slot.newRoom!,
+                                  style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold))
+                            ]
+                          ] else
+                            Text('-',
+                                style: TextStyle(
+                                    color: _localIsDark
+                                        ? Colors.white24
+                                        : Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // ======================== NEW ANIMATED PROFILE UI ========================
+
+  Widget _buildCompactHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return FadeTransition(
+      opacity: _headerFade,
+      child: ScaleTransition(
+        scale: _headerScale,
+        child: Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [
+                const Color(0xFF1A237E).withOpacity(0.95),
+                const Color(0xFF283593).withOpacity(0.9),
+              ]
+                  : [
+                const Color(0xFF0D6EFD).withOpacity(0.95),
+                const Color(0xFF20C997).withOpacity(0.9),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (isDark ? Colors.indigo : Colors.blueAccent).withOpacity(
+                  0.4,
+                ),
+                blurRadius: 20,
+                spreadRadius: -5,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _CompactPatternPainter(isDark: isDark),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          ScaleTransition(
+                            scale: _pulseAnimation,
+                            child: Container(
+                              width: 85,
+                              height: 85,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    Colors.white.withOpacity(0.25),
+                                    Colors.white.withOpacity(0.0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0.0, end: 1.0),
+                            duration: const Duration(milliseconds: 2000),
+                            curve: Curves.easeInOut,
+                            builder: (context, value, child) {
+                              return CustomPaint(
+                                size: const Size(85, 85),
+                                painter: _CompactRingPainter(
+                                  progress: value,
+                                  isDark: isDark,
+                                ),
+                              );
+                            },
+                          ),
+                          Hero(
+                            tag: 'profile_image',
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 3,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.3),
+                                    blurRadius: 15,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 35,
+                                backgroundImage: NetworkImage(profileImage),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  profileImage =
+                                  'https://images.unsplash.com/photo-1525973132219-a04334a76080?auto=format&fit=crop&w=800&q=80';
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Profile photo updated'),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Theme.of(context).colorScheme.primary,
+                                      Theme.of(context).colorScheme.secondary,
+                                    ],
+                                  ),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary.withOpacity(0.5),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              teacherName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.3,
+                                shadows: [
+                                  Shadow(
+                                    blurRadius: 10,
+                                    color: Colors.black26,
+                                    offset: Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.25),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.4),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.3),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.school_rounded,
+                                      color: Colors.white,
+                                      size: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      '$department - $cabin',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                        letterSpacing: 0.3,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.email_rounded,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      teacherEmail,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required int index,
+    List<Color>? gradientColors,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final gradient = gradientColors ?? [cs.primary, cs.secondary];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0.3, 0),
+        end: Offset.zero,
+      ).animate(_cardSlides[index]),
+      child: FadeTransition(
+        opacity: _cardSlides[index],
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: cs.outlineVariant.withOpacity(0.3),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: gradient.first.withOpacity(0.08),
+                      blurRadius: 12,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF2C2C2E)
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: gradient.first.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: gradient.first,
+                        size: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle(int index) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0.3, 0),
+        end: Offset.zero,
+      ).animate(_cardSlides[index]),
+      child: FadeTransition(
+        opacity: _cardSlides[index],
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: cs.outlineVariant.withOpacity(0.3),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: cs.primary.withOpacity(0.08),
+                  blurRadius: 12,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF2C2C2E)
+                        : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    _localIsDark
+                        ? Icons.dark_mode_rounded
+                        : Icons.light_mode_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Theme',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _localIsDark ? 'Dark mode active' : 'Light mode active',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _localIsDark,
+                  onChanged: (value) {
+                    setState(() => _localIsDark = value);
+                    widget.onToggleTheme(value);
+                  },
+                  activeColor: cs.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _teacherProfile(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      physics: const BouncingScrollPhysics(),
+      children: [
+        const SizedBox(height: 8),
+        _buildCompactHeader(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 22,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [cs.primary, cs.secondary],
+                  ),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Account Settings',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              _buildCompactCard(
+                icon: Icons.edit,
+                title: 'Edit Name',
+                subtitle: 'Update your display name',
+                onTap: () => _showEditDialog(
+                  'Edit Name',
+                  teacherName,
+                      (v) => setState(() => teacherName = v),
+                ),
+                index: 0,
+                gradientColors: const [Color(0xFF667EEA), Color(0xFF764BA2)],
+              ),
+              _buildCompactCard(
+                icon: Icons.email_rounded,
+                title: 'Edit Email',
+                subtitle: 'Change your email address',
+                onTap: () => _showEditDialog(
+                  'Edit Email',
+                  teacherEmail,
+                      (v) => setState(() => teacherEmail = v),
+                ),
+                index: 1,
+                gradientColors: const [Color(0xFFF093FB), Color(0xFFF5576C)],
+              ),
+              _buildCompactCard(
+                icon: Icons.home_work,
+                title: 'Edit Cabin',
+                subtitle: 'Update office location',
+                onTap: () => _showEditDialog(
+                  'Edit Cabin',
+                  cabin,
+                      (v) => setState(() => cabin = v),
+                ),
+                index: 2,
+                gradientColors: const [Color(0xFF43E97B), Color(0xFF38F9D7)],
+              ),
+              // NOTE: Removed the "Edit Timetable" tile since you can now edit directly from the dashboard
+              _buildThemeToggle(3),
+              _buildCompactCard(
+                icon: Icons.logout_rounded,
+                title: 'Log Out',
+                subtitle: 'Sign out from your account',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (_) => LoginPage(
+                        isDark: _localIsDark,
+                        onToggleTheme: widget.onToggleTheme,
+                      ),
+                    ),
+                        (route) => false,
+                  );
+                },
+                index: 4,
+                gradientColors: const [Color(0xFFFA709A), Color(0xFFFEE140)],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  // --- Helper Methods for Profile Actions ---
+  void _showEditDialog(
+      String title,
+      String initial,
+      ValueChanged<String> onSave,
+      ) {
+    final ctrl = TextEditingController(text: initial);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (ctrl.text.isNotEmpty) onSave(ctrl.text);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
+// --- CUSTOM PAINTERS FOR PROFILE ---
 
-// ----------------- Next class small card (no Slot shown) -----------------
+// Compact ring painter
+class _CompactRingPainter extends CustomPainter {
+  final double progress;
+  final bool isDark;
+
+  _CompactRingPainter({required this.progress, required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    final outerPaint = Paint()
+      ..color = Colors.white.withOpacity(0.2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    canvas.drawCircle(center, radius, outerPaint);
+
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final gradient = SweepGradient(
+      startAngle: -math.pi / 2,
+      endAngle: -math.pi / 2 + (2 * math.pi * progress),
+      colors: isDark
+          ? [
+        Colors.white,
+        const Color(0xFF64B5F6),
+        Colors.white.withOpacity(0.1),
+      ]
+          : [
+        Colors.white,
+        const Color(0xFF26C6DA),
+        Colors.white.withOpacity(0.1),
+      ],
+    );
+
+    final gradientPaint = Paint()
+      ..shader = gradient.createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      gradientPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CompactRingPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+// Compact pattern painter
+class _CompactPatternPainter extends CustomPainter {
+  final bool isDark;
+
+  _CompactPatternPainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Subtle circles
+    final circlePaint = Paint()
+      ..color = Colors.white.withOpacity(0.05)
+      ..style = PaintingStyle.fill;
+
+    for (var i = 0; i < 4; i++) {
+      final x = size.width * (0.2 + i * 0.2);
+      final y = size.height * 0.3;
+      final radius = 30.0 - (i * 5);
+      canvas.drawCircle(Offset(x, y), radius, circlePaint);
+    }
+
+    // Diagonal lines
+    final linePaint = Paint()
+      ..color = Colors.white.withOpacity(0.03)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    for (var i = 0; i < 6; i++) {
+      final x = i * (size.width / 6);
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x + size.height * 0.5, size.height),
+        linePaint,
+      );
+    }
+
+    // Dots pattern
+    final dotPaint = Paint()
+      ..color = Colors.white.withOpacity(0.08)
+      ..style = PaintingStyle.fill;
+
+    for (var i = 0; i < 15; i++) {
+      for (var j = 0; j < 6; j++) {
+        if ((i + j) % 2 == 0) {
+          final x = i * (size.width / 15) + 5;
+          final y = j * (size.height / 6) + 5;
+          canvas.drawCircle(Offset(x, y), 1.5, dotPaint);
+        }
+      }
+    }
+
+    // Curved waves
+    final wavePaint = Paint()
+      ..color = Colors.white.withOpacity(0.04)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    final path = Path();
+    path.moveTo(0, size.height * 0.6);
+
+    for (var i = 0; i <= 4; i++) {
+      final x = (size.width / 4) * i;
+      final y = size.height * 0.6 + (i.isEven ? -15 : 15);
+
+      if (i == 0) {
+        path.lineTo(x, y);
+      } else {
+        final prevX = (size.width / 4) * (i - 1);
+        final prevY = size.height * 0.6 + ((i - 1).isEven ? -15 : 15);
+        final controlX = (prevX + x) / 2;
+        final controlY = (prevY + y) / 2;
+        path.quadraticBezierTo(controlX, controlY, x, y);
+      }
+    }
+
+    canvas.drawPath(path, wavePaint);
+
+    // Radial gradient overlay
+    final radialPaint = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(0.3, -0.5),
+        radius: 1.2,
+        colors: [Colors.white.withOpacity(0.08), Colors.white.withOpacity(0.0)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), radialPaint);
+  }
+
+  @override
+  bool shouldRepaint(_CompactPatternPainter oldDelegate) => false;
+}
+
+// ====================== 1. CABIN STATUS CARD ======================
+class CabinStatusCard extends StatelessWidget {
+  final bool isAvailable;
+  final ValueChanged<bool> onChanged;
+
+  const CabinStatusCard({
+    super.key,
+    required this.isAvailable,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isAvailable
+        ? const Color(0xFF20C997)
+        : const Color(0xFFEF476F);
+    final text = isAvailable ? "Available" : "Not Available";
+    final icon = isAvailable ? Icons.check_circle : Icons.do_not_disturb_on;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: isAvailable
+            ? const LinearGradient(
+          colors: [Color(0xFF27E08D), Color(0xFF118B4A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        )
+            : const LinearGradient(
+          colors: [Color(0xFFEF476F), Color(0xFFD32F2F)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 6,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.white.withOpacity(0.2),
+            child: Icon(icon, color: Colors.white),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Cabin Status",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.9),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: isAvailable,
+            onChanged: onChanged,
+            activeColor: Colors.white,
+            activeTrackColor: Colors.white24,
+            inactiveThumbColor: Colors.white,
+            inactiveTrackColor: Colors.white24,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ====================== 2. NEXT CLASS CARD ======================
 class NextClassCard extends StatelessWidget {
   final Map<String, List<Map<String, String>>> timetable;
   final List<Map<String, String>> slots;
-  const NextClassCard({super.key, required this.timetable, required this.slots});
+
+  const NextClassCard({
+    super.key,
+    required this.timetable,
+    required this.slots,
+  });
 
   int _toMinutes(String hhmm) {
     final p = hhmm.split(':');
@@ -735,24 +1844,32 @@ class NextClassCard extends StatelessWidget {
       final slotStart = _toMinutes(slots[i]['time']!);
       if (nowMinutes <= slotStart) return i;
     }
-    return slots.length - 1;
+    return slots.length;
   }
 
   Map<String, String>? _findNextClass() {
     final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
     final now = DateTime.now();
     final todayIndex = (now.weekday - 1) % 7;
-    final slotStart = _currentSlotIndex();
+    final effectiveTodayIndex = (now.weekday > 5) ? 0 : todayIndex;
+    final startSearchSlot = (now.weekday > 5) ? 0 : _currentSlotIndex();
 
     for (int d = 0; d < 7; d++) {
-      final di = (todayIndex + d) % weekdays.length;
+      final di = (effectiveTodayIndex + d) % weekdays.length;
       final day = weekdays[di];
       final cells = timetable[day] ?? [];
-      final startSlot = d == 0 ? slotStart : 0;
-      for (int s = startSlot; s < cells.length; s++) {
+      final startSlot = d == 0 ? startSearchSlot : 0;
+
+      for (int s = startSlot; s < cells.length && s < slots.length; s++) {
         final c = cells[s];
-        if ((c['sub'] ?? '').trim().isNotEmpty && c['sub'] != 'Lunch' && c['sub'] != 'Research') {
-          return {'day': day, 'slot': (s + 1).toString(), 'sub': c['sub'] ?? '', 'room': c['room'] ?? ''};
+        final sub = (c['sub'] ?? '').trim();
+        if (sub.isNotEmpty && sub != 'Lunch' && sub != 'Research') {
+          return {
+            'day': d == 0 ? 'Today' : day,
+            'time': slots[s]['time'] ?? '',
+            'sub': sub,
+            'room': c['room'] ?? '',
+          };
         }
       }
     }
@@ -762,14 +1879,99 @@ class NextClassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final next = _findNextClass();
-    return Card(elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), child: Padding(padding: const EdgeInsets.all(12.0), child: Row(children: [
-      const Icon(Icons.schedule, size: 36),
-      const SizedBox(width: 12),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Next Class', style: TextStyle(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        if (next != null) Text('${next['sub']} • ${next['room']} • ${next['day']}') else const Text('No upcoming classes found'),
-      ])),
-    ])));
+    final hasNext = next != null;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0B57D0), Color(0xFF0646A6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.white.withOpacity(0.18),
+            child: const Icon(Icons.school, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'UPCOMING CLASS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                    color: Colors.white.withOpacity(0.7),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                if (hasNext) ...[
+                  Text(
+                    next!['sub']!,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        size: 14,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        "${next['day']} at ${next['time']}",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Icon(
+                        Icons.room,
+                        size: 14,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        "Room ${next['room']}",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else
+                  const Text(
+                    'No upcoming classes found',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

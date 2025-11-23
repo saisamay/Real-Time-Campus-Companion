@@ -185,7 +185,7 @@ class _LoginPageState extends State<LoginPage> {
             universityName: "Amrita Vishwa Vidyapeetham — Staff",
             userName: userName,
             userEmail: userEmail,
-            //profile: profile,
+            profile: profile,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );
@@ -194,7 +194,7 @@ class _LoginPageState extends State<LoginPage> {
             universityName: "Amrita Vishwa Vidyapeetham — Admin",
             userName: userName,
             userEmail: userEmail,
-            //profile: profile,
+            profile: profile,
             isDark: widget.isDark,
             onToggleTheme: widget.onToggleTheme,
           );

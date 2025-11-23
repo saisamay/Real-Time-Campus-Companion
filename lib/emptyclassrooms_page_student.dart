@@ -1,14 +1,14 @@
 // lib/classrooms_page.dart
 import 'package:flutter/material.dart';
 
-class EmptyClassroomsPage extends StatefulWidget {
-  const EmptyClassroomsPage({super.key});
+class EmptyClassroomsPagestudent extends StatefulWidget {
+  const EmptyClassroomsPagestudent({super.key});
 
   @override
-  State<EmptyClassroomsPage> createState() => _ClassroomsPageState();
+  State<EmptyClassroomsPagestudent> createState() => _ClassroomsPageState();
 }
 
-class _ClassroomsPageState extends State<EmptyClassroomsPage> {
+class _ClassroomsPageState extends State<EmptyClassroomsPagestudent> {
   // Simple room occupancy tracking (local to this widget)
   // NOTE: This map is read-only for students (UI only). It can be fed from backend/live updates later.
   final Map<String, bool?> _roomStatus = {
