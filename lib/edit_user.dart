@@ -395,43 +395,92 @@ class _EditUserByEmailPageState extends State<EditUserByEmailPage> {
               ),
               const SizedBox(height: 12),
 
-              // Profile preview
-              if (_profileFile != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    height: 150,
-                    child: Image.file(_profileFile!, fit: BoxFit.cover),
-                  ),
-                )
-              else
-                Container(
-                  height: 150,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[800] : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(
-                    child: Text('No new profile selected'),
-                  ),
+              // Profile preview - WhatsApp style circular avatar
+              Center(
+                child: Stack(
+                  children: [
+                    Container(
+                      width: 130,
+                      height: 130,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark ? Colors.grey[800] : Colors.grey[300],
+                      ),
+                      child: ClipOval(
+                        child: _profileFile != null
+                            ? Image.file(
+                          _profileFile!,
+                          fit: BoxFit.cover,
+                          width: 130,
+                          height: 130,
+                        )
+                            : Icon(
+                          Icons.person,
+                          size: 70,
+                          color: isDark ? Colors.grey[600] : Colors.grey[500],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: GestureDetector(
+                        onTap: () {
+                          // Show bottom sheet with camera/gallery options
+                          showModalBottomSheet(
+                            context: context,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                            ),
+                            builder: (context) => Container(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ListTile(
+                                    leading: const Icon(Icons.camera_alt, color: Colors.teal),
+                                    title: const Text('Camera'),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _pickImageFromCamera();
+                                    },
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.photo_library, color: Colors.teal),
+                                    title: const Text('Gallery'),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _pickImageFromGallery();
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.teal,
+                            border: Border.all(
+                              color: isDark ? Colors.grey[900]! : Colors.white,
+                              width: 3,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _pickImageFromGallery,
-                    icon: const Icon(Icons.photo),
-                    label: const Text('Gallery'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _pickImageFromCamera,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Camera'),
-                  ),
-                ],
               ),
 
               const SizedBox(height: 16),
