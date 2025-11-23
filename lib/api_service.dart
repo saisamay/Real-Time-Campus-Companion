@@ -262,9 +262,10 @@ class ApiService {
 
 
   // ===========================================================================
-  // SECTION 6: USER MANAGEMENT (Create / Edit / Upload)
+  // SECTION 6: USER MANAGEMENT (Create / Edit / Delete)
   // ===========================================================================
 
+  // 1. Create User
   static Future<Map<String, dynamic>> createUserWithProfile({
     required String name,
     required String email,
@@ -277,41 +278,34 @@ class ApiService {
     required String section,
     required String branch,
   }) async {
-    // FIX: The route must include '/api/user' to match app.js configuration
-    final uri = Uri.parse('$baseUrl/api/user');
+    final uri = Uri.parse('$baseUrl/api/user'); // Ensure backend route matches
 
     var request = http.MultipartRequest('POST', uri);
 
-    // Add Headers (Auth token if needed)
     final headerMap = await _headers(auth: true);
     request.headers.addAll(headerMap);
 
-    // Add Text Fields
     request.fields['name'] = name;
     request.fields['email'] = email;
     request.fields['password'] = password;
     request.fields['dob'] = dob.toIso8601String();
-    request.fields['role'] = role; // This sends "student", "teacher", etc.
+    request.fields['role'] = role;
     request.fields['rollNo'] = rollNo;
     request.fields['semester'] = semester;
     request.fields['section'] = section;
     request.fields['branch'] = branch;
 
-    // Add File
     if (profilePath.isNotEmpty) {
       request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
     }
 
-    // Send Request
     try {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
-      // Check content type before trying to decode JSON (prevents crashing on HTML errors)
       if (response.statusCode == 200 || response.statusCode == 201) {
         return jsonDecode(response.body);
       } else {
-        // Try to decode error message, or return raw body if not JSON
         try {
           final errorJson = jsonDecode(response.body);
           return {'success': false, 'message': errorJson['message'] ?? errorJson['error'] ?? 'Unknown Error'};
@@ -324,24 +318,43 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> updateUserByEmailWithProfile({
-    required String email,
+  // 2. Search Users (For Edit Page)
+  static Future<List<dynamic>> searchUsers(String query) async {
+    if (query.isEmpty) return [];
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/user/search?query=$query'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to search users');
+    }
+  }
+
+  // 3. Update User By ID (Replaces email-based update)
+  static Future<void> updateUserById({
+    required String id,
     String? name,
+    String? email,
     String? password,
     DateTime? dob,
-    String? profilePath,
     String? role,
     String? rollNo,
     String? semester,
     String? section,
     String? branch,
+    String? profilePath,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/user/edit');
-    final request = http.MultipartRequest('PUT', uri);
+    final uri = Uri.parse('$baseUrl/api/user/$id');
+    var request = http.MultipartRequest('PUT', uri);
 
-    request.fields['email'] = email;
+    request.headers.addAll(await _headers(auth: true));
+
     if (name != null) request.fields['name'] = name;
-    if (password != null) request.fields['password'] = password;
+    if (email != null) request.fields['email'] = email;
+    if (password != null && password.isNotEmpty) request.fields['password'] = password;
     if (dob != null) request.fields['dob'] = dob.toIso8601String();
     if (role != null) request.fields['role'] = role;
     if (rollNo != null) request.fields['rollNo'] = rollNo;
@@ -349,46 +362,29 @@ class ApiService {
     if (section != null) request.fields['section'] = section;
     if (branch != null) request.fields['branch'] = branch;
 
-    if (profilePath != null) {
-      final multipartFile = await http.MultipartFile.fromPath('profile', profilePath);
-      request.files.add(multipartFile);
+    if (profilePath != null && profilePath.isNotEmpty) {
+      request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
     }
 
-    final headers = await _headers(auth: true);
-    request.headers.addAll(headers);
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
 
-    final streamed = await request.send();
-    final res = await http.Response.fromStream(streamed);
-
-    if (res.statusCode == 200) {
-      final body = jsonDecode(res.body);
-      if (body['user'] != null) await saveUserProfile(body['user']);
-      return body;
-    } else {
-      throw Exception('Update failed: ${res.body}');
+    if (response.statusCode != 200) {
+      throw Exception('Update failed: ${response.body}');
     }
+    // Note: We DO NOT call saveUserProfile here because an Admin is editing another user.
+    // We don't want to overwrite the Admin's local session with the student's data.
   }
 
-  static Future<Map<String, dynamic>> uploadAvatarByEmail({
-    required String email,
-    required String profilePath,
-  }) async {
-    final uri = Uri.parse('$baseUrl/api/user/upload-avatar');
-    final request = http.MultipartRequest('POST', uri);
+  // 4. Delete User
+  static Future<void> deleteUser(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/user/$id'),
+      headers: await _headers(auth: true),
+    );
 
-    request.fields['email'] = email;
-    final multipartFile = await http.MultipartFile.fromPath('profile', profilePath);
-    request.files.add(multipartFile);
-
-    request.headers.addAll(await _headers(auth: true));
-
-    final streamed = await request.send();
-    final res = await http.Response.fromStream(streamed);
-
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body);
-    } else {
-      throw Exception('Upload avatar failed: ${res.body}');
+    if (response.statusCode != 200) {
+      throw Exception('Delete failed: ${response.body}');
     }
   }
 }

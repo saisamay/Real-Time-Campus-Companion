@@ -33,8 +33,27 @@ class _AddUserPageState extends State<AddUserPage> {
   final List<String> _semesterOptions = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'];
   String? _selectedSemester;
 
-  // NEW: Role Options
+  // Role Options
   final List<String> _roleOptions = ['student', 'classrep', 'teacher', 'admin', 'staff'];
+
+  // --- Helper: Check Role Requirements ---
+  bool get isStudent => role == 'student' || role == 'classrep';
+  bool get isTeacher => role == 'teacher';
+  bool get isStaff => role == 'staff';
+  bool get isAdmin => role == 'admin';
+
+  // Field Visibility/Enable State
+  bool get enableRollNo => isStudent || isAdmin;
+  bool get enableBranch => isStudent || isTeacher || isAdmin;
+  bool get enableSemester => isStudent || isAdmin;
+  bool get enableSection => isStudent || isAdmin;
+
+  // Field Validation Logic (Is it Mandatory?)
+  bool get requiredRollNo => isStudent; // Student & ClassRep must have rollNo
+  bool get requiredBranch => isStudent || isTeacher; // Student, ClassRep, and Teacher
+  bool get requiredSemester => isStudent;
+  bool get requiredSection => isStudent;
+  bool get requiredDob => true; // DOB required for all roles
 
   // --- Image Picking Logic ---
   void _showImageSourceDialog() {
@@ -49,16 +68,34 @@ class _AddUserPageState extends State<AddUserPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Profile Photo', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildSourceOption(Icons.camera_alt, 'Camera', ImageSource.camera),
-                  _buildSourceOption(Icons.photo_library, 'Gallery', ImageSource.gallery),
-                ],
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.teal),
+                title: const Text('Camera'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final XFile? file = await _picker.pickImage(
+                    source: ImageSource.camera,
+                    imageQuality: 85,
+                  );
+                  if (file != null) {
+                    setState(() => _profileFile = File(file.path));
+                  }
+                },
               ),
-              const SizedBox(height: 10),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.teal),
+                title: const Text('Gallery'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final XFile? file = await _picker.pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 85,
+                  );
+                  if (file != null) {
+                    setState(() => _profileFile = File(file.path));
+                  }
+                },
+              ),
             ],
           ),
         );
@@ -66,36 +103,11 @@ class _AddUserPageState extends State<AddUserPage> {
     );
   }
 
-  Widget _buildSourceOption(IconData icon, String label, ImageSource source) {
-    return InkWell(
-      onTap: () async {
-        Navigator.pop(context); // Close dialog
-        final XFile? file = await _picker.pickImage(source: source, imageQuality: 85);
-        if (file != null) {
-          setState(() {
-            _profileFile = File(file.path);
-          });
-        }
-      },
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: Colors.grey[200],
-            child: Icon(icon, size: 30, color: Colors.black87),
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-
   Future<void> _pickDob() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(2000),
+      initialDate: dob ?? DateTime(2000),
       firstDate: DateTime(1950),
       lastDate: now,
     );
@@ -108,14 +120,21 @@ class _AddUserPageState extends State<AddUserPage> {
 
     if (_profileFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a profile image'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please select a profile image'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
 
+    // DOB Check - Required for all
     if (dob == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select Date of Birth'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please select Date of Birth'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -124,7 +143,12 @@ class _AddUserPageState extends State<AddUserPage> {
     setState(() => _isSubmitting = true);
 
     try {
-      // Call your static API method
+      // Clear disabled fields before sending
+      if (!enableRollNo) rollNo = '';
+      if (!enableBranch) branch = '';
+      if (!enableSemester) semester = '';
+      if (!enableSection) section = '';
+
       final result = await ApiService.createUserWithProfile(
         name: name,
         email: email,
@@ -140,14 +164,20 @@ class _AddUserPageState extends State<AddUserPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User created successfully!'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('User created successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
-        Navigator.of(context).pop(true); // Return success
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Creation failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Creation failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -158,6 +188,9 @@ class _AddUserPageState extends State<AddUserPage> {
   // --- UI Build ---
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final disabledColor = isDark ? Colors.grey[800] : Colors.grey[200];
+
     return Scaffold(
       appBar: AppBar(title: const Text('Add New User')),
       body: SingleChildScrollView(
@@ -166,17 +199,31 @@ class _AddUserPageState extends State<AddUserPage> {
           key: _formKey,
           child: Column(
             children: [
-              // 1. Circular Image Editor
+              // 1. Circular Image Editor (WhatsApp Style)
               Center(
                 child: Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: Colors.grey[300],
-                      backgroundImage: _profileFile != null ? FileImage(_profileFile!) : null,
-                      child: _profileFile == null
-                          ? const Icon(Icons.person, size: 60, color: Colors.grey)
-                          : null,
+                    Container(
+                      width: 130,
+                      height: 130,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark ? Colors.grey[800] : Colors.grey[300],
+                      ),
+                      child: ClipOval(
+                        child: _profileFile != null
+                            ? Image.file(
+                          _profileFile!,
+                          fit: BoxFit.cover,
+                          width: 130,
+                          height: 130,
+                        )
+                            : Icon(
+                          Icons.person,
+                          size: 70,
+                          color: isDark ? Colors.grey[600] : Colors.grey[500],
+                        ),
+                      ),
                     ),
                     Positioned(
                       bottom: 0,
@@ -184,13 +231,21 @@ class _AddUserPageState extends State<AddUserPage> {
                       child: GestureDetector(
                         onTap: _showImageSourceDialog,
                         child: Container(
-                          height: 40,
                           width: 40,
-                          decoration: const BoxDecoration(
-                            color: Colors.teal,
+                          height: 40,
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
+                            color: Colors.teal,
+                            border: Border.all(
+                              color: isDark ? Colors.grey[900]! : Colors.white,
+                              width: 3,
+                            ),
                           ),
-                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),
@@ -199,7 +254,7 @@ class _AddUserPageState extends State<AddUserPage> {
               ),
               const SizedBox(height: 25),
 
-              // NEW: Role Dropdown
+              // ROLE SELECTOR
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
                   labelText: 'Role',
@@ -217,13 +272,19 @@ class _AddUserPageState extends State<AddUserPage> {
                   if (newValue != null) {
                     setState(() {
                       role = newValue;
+                      // Reset dependent fields
+                      _selectedSemester = null;
+                      semester = '';
+                      section = '';
+                      rollNo = '';
+                      branch = '';
                     });
                   }
                 },
               ),
               const SizedBox(height: 15),
 
-              // 2. Personal Info
+              // 2. Personal Info - Name (Required for all)
               TextFormField(
                 decoration: const InputDecoration(
                   labelText: 'Full Name',
@@ -235,6 +296,7 @@ class _AddUserPageState extends State<AddUserPage> {
               ),
               const SizedBox(height: 15),
 
+              // Email (Required for all)
               TextFormField(
                 decoration: const InputDecoration(
                   labelText: 'Email Address',
@@ -247,6 +309,7 @@ class _AddUserPageState extends State<AddUserPage> {
               ),
               const SizedBox(height: 15),
 
+              // Password (Required for all)
               TextFormField(
                 decoration: const InputDecoration(
                   labelText: 'Password',
@@ -259,91 +322,152 @@ class _AddUserPageState extends State<AddUserPage> {
               ),
               const SizedBox(height: 15),
 
-              // 3. Academic Details Row
+              // 3. Roll No and Section Row
               Row(
                 children: [
+                  // Roll No (Student, ClassRep: Required | Admin: Optional | Others: Disabled)
                   Expanded(
-                    child: TextFormField(
-                      decoration: const InputDecoration(
-                        labelText: 'Roll No',
-                        border: OutlineInputBorder(),
+                    child: AbsorbPointer(
+                      absorbing: !enableRollNo,
+                      child: Opacity(
+                        opacity: enableRollNo ? 1.0 : 0.5,
+                        child: TextFormField(
+                          enabled: enableRollNo,
+                          decoration: InputDecoration(
+                            labelText: 'Roll No',
+                            border: const OutlineInputBorder(),
+                            filled: !enableRollNo,
+                            fillColor: !enableRollNo ? disabledColor : null,
+                          ),
+                          onSaved: (v) => rollNo = v?.trim() ?? '',
+                          validator: (v) {
+                            if (requiredRollNo && (v == null || v.trim().isEmpty)) {
+                              return 'Required';
+                            }
+                            return null;
+                          },
+                        ),
                       ),
-                      onSaved: (v) => rollNo = v?.trim() ?? '',
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
                     ),
                   ),
                   const SizedBox(width: 10),
+                  // Section (Student, ClassRep: Required | Admin: Optional | Others: Disabled)
                   Expanded(
-                    child: TextFormField(
-                      decoration: const InputDecoration(
-                        labelText: 'Section',
-                        border: OutlineInputBorder(),
+                    child: AbsorbPointer(
+                      absorbing: !enableSection,
+                      child: Opacity(
+                        opacity: enableSection ? 1.0 : 0.5,
+                        child: TextFormField(
+                          enabled: enableSection,
+                          decoration: InputDecoration(
+                            labelText: 'Section',
+                            border: const OutlineInputBorder(),
+                            filled: !enableSection,
+                            fillColor: !enableSection ? disabledColor : null,
+                          ),
+                          onSaved: (v) => section = v?.trim() ?? '',
+                          validator: (v) {
+                            if (requiredSection && (v == null || v.trim().isEmpty)) {
+                              return 'Required';
+                            }
+                            return null;
+                          },
+                        ),
                       ),
-                      onSaved: (v) => section = v?.trim() ?? '',
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 15),
 
-              // 4. Semester Dropdown & Branch
+              // 4. Semester & Branch
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Semester Dropdown
+                  // Semester (Student, ClassRep: Required | Admin: Optional | Others: Disabled)
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Semester',
-                        border: OutlineInputBorder(),
+                    child: AbsorbPointer(
+                      absorbing: !enableSemester,
+                      child: Opacity(
+                        opacity: enableSemester ? 1.0 : 0.5,
+                        child: DropdownButtonFormField<String>(
+                          decoration: InputDecoration(
+                            labelText: 'Semester',
+                            border: const OutlineInputBorder(),
+                            filled: !enableSemester,
+                            fillColor: !enableSemester ? disabledColor : null,
+                          ),
+                          value: _selectedSemester,
+                          items: _semesterOptions.map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
+                          onChanged: enableSemester
+                              ? (newValue) {
+                            setState(() {
+                              _selectedSemester = newValue;
+                              semester = newValue ?? '';
+                            });
+                          }
+                              : null,
+                          validator: (value) {
+                            if (requiredSemester && value == null) return 'Required';
+                            return null;
+                          },
+                          onSaved: (value) => semester = value ?? '',
+                        ),
                       ),
-                      value: _selectedSemester,
-                      items: _semesterOptions.map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
-                      onChanged: (newValue) {
-                        setState(() {
-                          _selectedSemester = newValue;
-                          semester = newValue ?? '';
-                        });
-                      },
-                      validator: (value) => value == null ? 'Required' : null,
-                      onSaved: (value) => semester = value ?? '',
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Branch Field
+                  // Branch (Student, ClassRep, Teacher: Required | Admin: Optional | Staff: Disabled)
                   Expanded(
-                    child: TextFormField(
-                      decoration: const InputDecoration(
-                        labelText: 'Branch',
-                        border: OutlineInputBorder(),
-                        hintText: 'e.g. CSE',
+                    child: AbsorbPointer(
+                      absorbing: !enableBranch,
+                      child: Opacity(
+                        opacity: enableBranch ? 1.0 : 0.5,
+                        child: TextFormField(
+                          enabled: enableBranch,
+                          decoration: InputDecoration(
+                            labelText: 'Branch',
+                            border: const OutlineInputBorder(),
+                            hintText: 'e.g. CSE',
+                            filled: !enableBranch,
+                            fillColor: !enableBranch ? disabledColor : null,
+                          ),
+                          onSaved: (v) => branch = v?.trim() ?? '',
+                          validator: (v) {
+                            if (requiredBranch && (v == null || v.trim().isEmpty)) {
+                              return 'Required';
+                            }
+                            return null;
+                          },
+                        ),
                       ),
-                      onSaved: (v) => branch = v?.trim() ?? '',
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 15),
 
-              // 5. DOB Picker
+              // 5. DOB Picker (Required for ALL roles)
               InkWell(
                 onTap: _pickDob,
                 child: InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Date of Birth',
+                    labelText: 'Date of Birth *',
                     prefixIcon: Icon(Icons.calendar_today),
                     border: OutlineInputBorder(),
                   ),
                   child: Text(
                     dob == null ? 'Select Date' : DateFormat.yMMMd().format(dob!),
-                    style: TextStyle(color: dob == null ? Colors.grey[600] : Colors.black87),
+                    style: TextStyle(
+                      color: dob == null
+                          ? Colors.grey[600]
+                          : (isDark ? Colors.white : Colors.black87),
+                    ),
                   ),
                 ),
               ),
@@ -356,13 +480,28 @@ class _AddUserPageState extends State<AddUserPage> {
                 child: ElevatedButton(
                   onPressed: _isSubmitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    backgroundColor: Theme.of(context).primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    backgroundColor: Colors.teal,
                     foregroundColor: Colors.white,
                   ),
                   child: _isSubmitting
-                      ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Create User', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ? const SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                      : const Text(
+                    'Create User',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ],

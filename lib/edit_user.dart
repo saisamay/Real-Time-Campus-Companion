@@ -1,112 +1,90 @@
-// lib/edit_user_by_email.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'api_service.dart';
+import 'package:intl/intl.dart';
 
-class EditUserByEmailPage extends StatefulWidget {
-  const EditUserByEmailPage({Key? key}) : super(key: key);
+class EditUserPage extends StatefulWidget {
+  const EditUserPage({super.key});
 
   @override
-  State<EditUserByEmailPage> createState() => _EditUserByEmailPageState();
+  State<EditUserPage> createState() => _EditUserPageState();
 }
 
-class _EditUserByEmailPageState extends State<EditUserByEmailPage> {
+class _EditUserPageState extends State<EditUserPage> {
   final _formKey = GlobalKey<FormState>();
   final _picker = ImagePicker();
-  final _emailController = TextEditingController();
 
-  // Required identifier
-  String email = '';
+  // We use this key to force the Autocomplete to rebuild/clear when needed
+  Key _searchKey = UniqueKey();
 
-  // editable fields
+  // Search State
+  String? _selectedUserId; // The ID of the user we are editing
+  String? _currentProfileUrl; // URL from backend
+
+  // Form Fields
   String name = '';
+  String email = '';
   String password = '';
   String rollNo = '';
   String branch = '';
-  int? semester;
+  String semester = '';
   String section = '';
   String role = 'student';
   DateTime? dob;
 
-  // optional new profile image chosen locally
-  File? _profileFile;
-
+  File? _newProfileFile;
   bool _isSubmitting = false;
-  bool _isUploadingImage = false;
-  double _imageUploadProgress = 0.0;
 
-  // For autocomplete
-  List<String> _allUserEmails = [];
-  List<String> _filteredEmails = [];
-  bool _showSuggestions = false;
+  // Dropdown Options
+  final List<String> _semesterOptions = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'];
+  String? _selectedSemester;
+  final List<String> _roleOptions = ['student', 'classrep', 'teacher', 'admin', 'staff'];
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchAllUserEmails();
-  }
+  // --- Logic for Field Visibility ---
+  bool get isStudent => role == 'student' || role == 'classrep';
+  bool get isTeacher => role == 'teacher';
+  bool get isAdmin => role == 'admin';
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    super.dispose();
-  }
+  bool get enableRollNo => isStudent || isAdmin;
+  bool get enableBranch => isStudent || isTeacher || isAdmin;
+  bool get enableSemester => isStudent || isAdmin;
+  bool get enableSection => isStudent || isAdmin;
 
-  /// Fetch all user emails from backend for autocomplete
-  Future<void> _fetchAllUserEmails() async {
-    try {
-      final url = Uri.parse('${ApiService.baseUrl}/api/users/emails');
-      final res = await http.get(url);
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data is List) {
-          setState(() {
-            _allUserEmails = data.map((e) => e.toString()).toList();
-          });
-        }
-      }
-    } catch (e) {
-      // Silent fail - autocomplete just won't work
-      debugPrint('Failed to fetch user emails: $e');
-    }
-  }
-
-  /// Filter emails based on input
-  void _filterEmails(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        _filteredEmails = [];
-        _showSuggestions = false;
-      });
-      return;
-    }
-
-    final filtered = _allUserEmails
-        .where((email) => email.toLowerCase().contains(query.toLowerCase()))
-        .take(5)
-        .toList();
-
-    setState(() {
-      _filteredEmails = filtered;
-      _showSuggestions = filtered.isNotEmpty;
-    });
-  }
-
-  Future<void> _pickImageFromGallery() async {
-    final XFile? f = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
-    if (f == null) return;
-    setState(() => _profileFile = File(f.path));
-  }
-
-  Future<void> _pickImageFromCamera() async {
-    final XFile? f = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
-    if (f == null) return;
-    setState(() => _profileFile = File(f.path));
+  // --- Image Picker ---
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.teal),
+                title: const Text('Camera'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final f = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
+                  if (f != null) setState(() => _newProfileFile = File(f.path));
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.teal),
+                title: const Text('Gallery'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final f = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+                  if (f != null) setState(() => _newProfileFile = File(f.path));
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _pickDob() async {
@@ -120,165 +98,123 @@ class _EditUserByEmailPageState extends State<EditUserByEmailPage> {
     if (picked != null) setState(() => dob = picked);
   }
 
-  /// Sends the profile image first (if any), using ApiService.uploadAvatarByEmail
-  Future<void> _uploadImageIfPresent() async {
-    if (_profileFile == null) return;
+  // --- Populate Form ---
+  void _populateForm(Map<String, dynamic> user) {
     setState(() {
-      _isUploadingImage = true;
-      _imageUploadProgress = 0.0;
+      _selectedUserId = user['_id'];
+      name = user['name'] ?? '';
+      email = user['email'] ?? '';
+      role = user['role'] ?? 'student';
+      rollNo = user['rollNo'] ?? '';
+      branch = user['branch'] ?? '';
+      semester = user['semester'] ?? '';
+      section = user['section'] ?? '';
+      password = ''; // Clear password field
+
+      // Parse DOB
+      if (user['dob'] != null) {
+        try { dob = DateTime.parse(user['dob']); } catch (_) { dob = null; }
+      } else { dob = null; }
+
+      // Handle Semester Dropdown matching
+      if (_semesterOptions.contains(semester)) {
+        _selectedSemester = semester;
+      } else {
+        _selectedSemester = null;
+      }
+
+      // Profile Image
+      if (user['profile'] != null && user['profile']['url'] != null) {
+        _currentProfileUrl = user['profile']['url'];
+      } else {
+        _currentProfileUrl = null;
+      }
+      _newProfileFile = null; // Reset any locally picked file
     });
-
-    try {
-      await ApiService.uploadAvatarByEmail(
-        email: email,
-        profilePath: _profileFile!.path,
-      );
-    } catch (e) {
-      rethrow;
-    } finally {
-      setState(() {
-        _isUploadingImage = false;
-        _imageUploadProgress = 0.0;
-      });
-    }
   }
 
-  /// Sends the other updates (non-image) to backend using email-based JSON endpoint.
-  Future<void> _sendFieldUpdates() async {
-    final Map<String, dynamic> payload = {'email': email};
-
-    if (name.isNotEmpty) payload['name'] = name;
-    if (password.isNotEmpty) payload['password'] = password;
-    if (rollNo.isNotEmpty) payload['rollNo'] = rollNo;
-    if (branch.isNotEmpty) payload['branch'] = branch;
-    if (semester != null) payload['semester'] = semester;
-    if (section.isNotEmpty) payload['section'] = section;
-    if (role.isNotEmpty) payload['role'] = role;
-    if (dob != null) payload['dob'] = dob!.toIso8601String();
-
-    if (payload.keys.length <= 1) return;
-
-    final url = Uri.parse('${ApiService.baseUrl}/api/users/update-by-email');
-    final headers = <String, String>{'Content-Type': 'application/json'};
-
-    final res = await http.put(url, headers: headers, body: jsonEncode(payload));
-
-    if (res.statusCode == 200) {
-      return;
-    } else {
-      String msg = res.body;
-      try {
-        final body = jsonDecode(res.body);
-        if (body is Map && (body['message'] != null || body['error'] != null)) {
-          msg = body['message'] ?? body['error'] ?? res.body;
-        }
-      } catch (_) {}
-      throw Exception('Update failed (${res.statusCode}): $msg');
-    }
+  // --- Helper to Clear Selection ---
+  void _clearSelection() {
+    setState(() {
+      _selectedUserId = null;
+      _searchKey = UniqueKey(); // This forces the Autocomplete to reset completely
+      // Reset form variables just in case
+      name = '';
+      email = '';
+      rollNo = '';
+      branch = '';
+      section = '';
+      _newProfileFile = null;
+      _currentProfileUrl = null;
+    });
   }
 
-  Future<void> _submit() async {
-    if (email.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User email is required')),
-      );
-      return;
-    }
+  // --- API Actions ---
 
+  Future<void> _updateUser() async {
+    if (_selectedUserId == null) return;
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
     setState(() => _isSubmitting = true);
     try {
-      if (_profileFile != null) {
-        await _uploadImageIfPresent();
-      }
+      // Clear disabled fields
+      if (!enableRollNo) rollNo = '';
+      if (!enableBranch) branch = '';
+      if (!enableSemester) semester = '';
+      if (!enableSection) section = '';
 
-      await _sendFieldUpdates();
+      await ApiService.updateUserById(
+        id: _selectedUserId!,
+        name: name,
+        email: email,
+        password: password,
+        dob: dob,
+        role: role,
+        rollNo: rollNo,
+        semester: semester,
+        section: section,
+        branch: branch,
+        profilePath: _newProfileFile?.path,
+      );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User updated successfully')),
-        );
-        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User Updated Successfully!'), backgroundColor: Colors.green));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update failed: $e')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update Failed: $e'), backgroundColor: Colors.red));
     } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
   Future<void> _deleteUser() async {
-    if (email.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User email is required')),
-      );
-      return;
-    }
+    if (_selectedUserId == null) return;
 
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Delete User'),
-        content: Text('Are you sure you want to delete the user with email "$email"? This action cannot be undone.'),
+        content: Text('Are you sure you want to delete $email?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
 
-    if (confirmed != true) return;
-
-    setState(() => _isSubmitting = true);
-    try {
-      final url = Uri.parse('${ApiService.baseUrl}/api/users/delete-by-email');
-      final headers = <String, String>{'Content-Type': 'application/json'};
-      final payload = {'email': email};
-
-      final res = await http.delete(url, headers: headers, body: jsonEncode(payload));
-
-      if (res.statusCode == 200) {
+    if (confirm == true) {
+      setState(() => _isSubmitting = true);
+      try {
+        await ApiService.deleteUser(_selectedUserId!);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User deleted successfully')),
-          );
-          Navigator.of(context).pop(true);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User Deleted'), backgroundColor: Colors.green));
+          _clearSelection(); // Reset to search mode
         }
-      } else {
-        String msg = res.body;
-        try {
-          final body = jsonDecode(res.body);
-          if (body is Map && (body['message'] != null || body['error'] != null)) {
-            msg = body['message'] ?? body['error'] ?? res.body;
-          }
-        } catch (_) {}
-        throw Exception('Delete failed (${res.statusCode}): $msg');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete Failed: $e'), backgroundColor: Colors.red));
+      } finally {
+        if (mounted) setState(() => _isSubmitting = false);
       }
     }
   }
@@ -286,295 +222,237 @@ class _EditUserByEmailPageState extends State<EditUserByEmailPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final disabledColor = isDark ? Colors.grey[800] : Colors.grey[200];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit User (by email)')),
-      body: GestureDetector(
-        onTap: () {
-          // Hide suggestions when tapping outside
-          setState(() => _showSuggestions = false);
-          FocusScope.of(context).unfocus();
-        },
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              // Email field with autocomplete
-              Stack(
-                children: [
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: InputDecoration(
-                      labelText: 'User Email (required)',
-                      suffixIcon: _emailController.text.isNotEmpty
-                          ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _emailController.clear();
-                          setState(() {
-                            email = '';
-                            _showSuggestions = false;
-                          });
-                        },
-                      )
-                          : null,
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                    onChanged: (v) {
-                      setState(() {
-                        email = v.trim().toLowerCase();
-                      });
-                      _filterEmails(v);
-                    },
-                    onTap: () {
-                      if (_emailController.text.isNotEmpty) {
-                        _filterEmails(_emailController.text);
-                      }
-                    },
+      appBar: AppBar(title: const Text('Edit / Delete User')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            // --- SEARCH BAR (Autocomplete) ---
+            Autocomplete<Map<String, dynamic>>(
+              key: _searchKey, // IMPORTANT: Forces rebuild on clear
+              displayStringForOption: (option) => option['email'] ?? '',
+              optionsBuilder: (TextEditingValue textEditingValue) async {
+                if (textEditingValue.text.isEmpty) {
+                  return const Iterable<Map<String, dynamic>>.empty();
+                }
+                try {
+                  final results = await ApiService.searchUsers(textEditingValue.text);
+                  return results.cast<Map<String, dynamic>>();
+                } catch (e) {
+                  return const Iterable<Map<String, dynamic>>.empty();
+                }
+              },
+              onSelected: (Map<String, dynamic> selection) {
+                _populateForm(selection);
+              },
+              fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                return TextField(
+                  controller: textEditingController,
+                  focusNode: focusNode,
+                  decoration: InputDecoration(
+                    labelText: 'Search User by Email',
+                    hintText: 'Start typing email...',
+                    prefixIcon: const Icon(Icons.search),
+                    // NEW: Clear Button
+                    suffixIcon: textEditingController.text.isNotEmpty || _selectedUserId != null
+                        ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        textEditingController.clear();
+                        _clearSelection(); // Resets everything
+                      },
+                    )
+                        : null,
+                    border: const OutlineInputBorder(),
                   ),
-                  // Suggestions dropdown
-                  if (_showSuggestions)
-                    Positioned(
-                      top: 60,
-                      left: 0,
-                      right: 0,
-                      child: Material(
-                        elevation: 4,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.grey[850] : Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-                            ),
-                          ),
-                          constraints: const BoxConstraints(maxHeight: 200),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            padding: EdgeInsets.zero,
-                            itemCount: _filteredEmails.length,
-                            itemBuilder: (context, index) {
-                              final suggestedEmail = _filteredEmails[index];
-                              return InkWell(
-                                onTap: () {
-                                  _emailController.text = suggestedEmail;
-                                  setState(() {
-                                    email = suggestedEmail;
-                                    _showSuggestions = false;
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey[800]!
-                                            : Colors.grey[200]!,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    suggestedEmail,
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white : Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Profile preview - WhatsApp style circular avatar
-              Center(
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 130,
-                      height: 130,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isDark ? Colors.grey[800] : Colors.grey[300],
-                      ),
-                      child: ClipOval(
-                        child: _profileFile != null
-                            ? Image.file(
-                          _profileFile!,
-                          fit: BoxFit.cover,
-                          width: 130,
-                          height: 130,
-                        )
-                            : Icon(
-                          Icons.person,
-                          size: 70,
-                          color: isDark ? Colors.grey[600] : Colors.grey[500],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: GestureDetector(
-                        onTap: () {
-                          // Show bottom sheet with camera/gallery options
-                          showModalBottomSheet(
-                            context: context,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.vertical(
-                                top: Radius.circular(20),
-                              ),
-                            ),
-                            builder: (context) => Container(
-                              padding: const EdgeInsets.symmetric(vertical: 20),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ListTile(
-                                    leading: const Icon(Icons.camera_alt, color: Colors.teal),
-                                    title: const Text('Camera'),
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      _pickImageFromCamera();
-                                    },
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.photo_library, color: Colors.teal),
-                                    title: const Text('Gallery'),
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      _pickImageFromGallery();
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
+                );
+              },
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4.0,
+                    child: SizedBox(
+                      width: MediaQuery.of(context).size.width - 40,
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          final option = options.elementAt(index);
+                          return ListTile(
+                            leading: const Icon(Icons.person),
+                            title: Text(option['name'] ?? 'Unknown'),
+                            subtitle: Text(option['email'] ?? ''),
+                            onTap: () => onSelected(option),
                           );
                         },
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.teal,
-                            border: Border.all(
-                              color: isDark ? Colors.grey[900]! : Colors.white,
-                              width: 3,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
                       ),
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
+            ),
 
-              const SizedBox(height: 16),
+            const SizedBox(height: 20),
+            const Divider(),
+            const SizedBox(height: 10),
+
+            // --- EDIT FORM (Only visible if user selected) ---
+            if (_selectedUserId == null)
+              const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Column(
+                      children: [
+                        Icon(Icons.person_search, size: 60, color: Colors.grey),
+                        SizedBox(height: 10),
+                        Text("Search and select a user above to edit details.", style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+              )
+            else
               Form(
                 key: _formKey,
                 child: Column(
                   children: [
-                    TextFormField(
-                      decoration: const InputDecoration(labelText: 'Full name'),
-                      onSaved: (v) => name = v?.trim() ?? '',
-                    ),
-                    TextFormField(
-                      decoration: const InputDecoration(
-                        labelText: 'Password (leave blank to keep)',
+                    // 1. Image Editor
+                    Center(
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 130, height: 130,
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? Colors.grey[800] : Colors.grey[300]),
+                            child: ClipOval(
+                              child: _newProfileFile != null
+                                  ? Image.file(_newProfileFile!, fit: BoxFit.cover, width: 130, height: 130)
+                                  : (_currentProfileUrl != null
+                                  ? Image.network(_currentProfileUrl!, fit: BoxFit.cover, width: 130, height: 130, errorBuilder: (c,o,s) => const Icon(Icons.person, size: 70))
+                                  : Icon(Icons.person, size: 70, color: isDark ? Colors.grey[600] : Colors.grey[500])),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0, right: 0,
+                            child: GestureDetector(
+                              onTap: _showImageSourceDialog,
+                              child: Container(
+                                width: 40, height: 40,
+                                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.teal, border: Border.all(color: isDark ? Colors.grey[900]! : Colors.white, width: 3)),
+                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      obscureText: true,
+                    ),
+                    const SizedBox(height: 25),
+
+                    // Role
+                    DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(labelText: 'Role', prefixIcon: Icon(Icons.admin_panel_settings_outlined), border: OutlineInputBorder()),
+                      value: role,
+                      items: _roleOptions.map((v) => DropdownMenuItem(value: v, child: Text(v.toUpperCase()))).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() { role = val; });
+                      },
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Personal Info
+                    TextFormField(
+                      initialValue: name,
+                      decoration: const InputDecoration(labelText: 'Full Name', prefixIcon: Icon(Icons.person_outline), border: OutlineInputBorder()),
+                      onSaved: (v) => name = v?.trim() ?? '',
+                      validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 15),
+
+                    TextFormField(
+                      initialValue: email,
+                      decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined), border: OutlineInputBorder()),
+                      onSaved: (v) => email = v?.trim().toLowerCase() ?? '',
+                      validator: (v) => (v == null || !v.contains('@')) ? 'Invalid email' : null,
+                    ),
+                    const SizedBox(height: 15),
+
+                    TextFormField(
+                      decoration: const InputDecoration(labelText: 'New Password (Optional)', prefixIcon: Icon(Icons.lock_outline), border: OutlineInputBorder(), hintText: 'Leave blank to keep current'),
                       onSaved: (v) => password = v ?? '',
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            decoration: const InputDecoration(labelText: 'Roll No'),
-                            onSaved: (v) => rollNo = v?.trim() ?? '',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            decoration: const InputDecoration(labelText: 'Branch'),
-                            onSaved: (v) => branch = v?.trim() ?? '',
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            decoration: const InputDecoration(labelText: 'Semester'),
-                            keyboardType: TextInputType.number,
-                            onSaved: (v) => semester =
-                            (v == null || v.isEmpty) ? null : int.tryParse(v),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            decoration: const InputDecoration(labelText: 'Section'),
-                            onSaved: (v) => section = v?.trim() ?? '',
-                          ),
-                        ),
-                      ],
-                    ),
-                    ListTile(
-                      title: Text(
-                        dob == null ? 'Select DOB' : DateFormat.yMMMd().format(dob!),
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.calendar_today),
-                        onPressed: _pickDob,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 15),
 
-                    // Action buttons - Update and Delete side by side
+                    // RollNo & Section
+                    Row(
+                      children: [
+                        Expanded(child: AbsorbPointer(absorbing: !enableRollNo, child: Opacity(opacity: enableRollNo ? 1 : 0.5, child: TextFormField(
+                          initialValue: rollNo,
+                          decoration: InputDecoration(labelText: 'Roll No', border: const OutlineInputBorder(), filled: !enableRollNo, fillColor: !enableRollNo ? disabledColor : null),
+                          onSaved: (v) => rollNo = v?.trim() ?? '',
+                        )))),
+                        const SizedBox(width: 10),
+                        Expanded(child: AbsorbPointer(absorbing: !enableSection, child: Opacity(opacity: enableSection ? 1 : 0.5, child: TextFormField(
+                          initialValue: section,
+                          decoration: InputDecoration(labelText: 'Section', border: const OutlineInputBorder(), filled: !enableSection, fillColor: !enableSection ? disabledColor : null),
+                          onSaved: (v) => section = v?.trim() ?? '',
+                        )))),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Semester & Branch
+                    Row(
+                      children: [
+                        Expanded(child: AbsorbPointer(absorbing: !enableSemester, child: Opacity(opacity: enableSemester ? 1 : 0.5, child: DropdownButtonFormField<String>(
+                          decoration: InputDecoration(labelText: 'Semester', border: const OutlineInputBorder(), filled: !enableSemester, fillColor: !enableSemester ? disabledColor : null),
+                          value: _selectedSemester,
+                          items: _semesterOptions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                          onChanged: enableSemester ? (v) => setState(() { _selectedSemester = v; semester = v ?? ''; }) : null,
+                          onSaved: (v) => semester = v ?? '',
+                        )))),
+                        const SizedBox(width: 10),
+                        Expanded(child: AbsorbPointer(absorbing: !enableBranch, child: Opacity(opacity: enableBranch ? 1 : 0.5, child: TextFormField(
+                          initialValue: branch,
+                          decoration: InputDecoration(labelText: 'Branch', border: const OutlineInputBorder(), filled: !enableBranch, fillColor: !enableBranch ? disabledColor : null),
+                          onSaved: (v) => branch = v?.trim() ?? '',
+                        )))),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+
+                    // DOB
+                    InkWell(
+                      onTap: _pickDob,
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: 'Date of Birth', prefixIcon: Icon(Icons.calendar_today), border: OutlineInputBorder()),
+                        child: Text(dob == null ? 'Select Date' : DateFormat.yMMMd().format(dob!), style: TextStyle(color: dob == null ? Colors.grey : (isDark ? Colors.white : Colors.black))),
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // Buttons
                     if (_isSubmitting)
                       const CircularProgressIndicator()
                     else
                       Row(
                         children: [
                           Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _submit,
-                              icon: const Icon(Icons.save),
-                              label: const Text('Update User'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                backgroundColor: isDark ? Colors.blue[700] : Colors.blue,
-                                foregroundColor: Colors.white,
-                              ),
+                            child: ElevatedButton(
+                              onPressed: _updateUser,
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                              child: const Text('Update User', style: TextStyle(fontSize: 16)),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 15),
                           Expanded(
-                            child: ElevatedButton.icon(
+                            child: ElevatedButton(
                               onPressed: _deleteUser,
-                              icon: const Icon(Icons.delete),
-                              label: const Text('Delete User'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                backgroundColor: isDark ? Colors.red[700] : Colors.red,
-                                foregroundColor: Colors.white,
-                              ),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                              child: const Text('Delete User', style: TextStyle(fontSize: 16)),
                             ),
                           ),
                         ],
@@ -582,8 +460,7 @@ class _EditUserByEmailPageState extends State<EditUserByEmailPage> {
                   ],
                 ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );

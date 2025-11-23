@@ -405,7 +405,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
         // 3. Edit User Page
         item('Edit User', Icons.edit, () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const EditUserByEmailPage()));
+          Navigator.push(context, MaterialPageRoute(builder: (context) => const EditUserPage()));
         }),
 
         // 4. Add Timetable Page
