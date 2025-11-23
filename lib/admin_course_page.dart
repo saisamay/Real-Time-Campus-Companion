@@ -298,15 +298,28 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
                             Expanded(
                               child: Autocomplete<TeacherSearchResult>(
                                 displayStringForOption: (TeacherSearchResult option) => option.name,
-                                optionsBuilder: (TextEditingValue textEditingValue) async {
-                                  if (textEditingValue.text.isEmpty) return const Iterable<TeacherSearchResult>.empty();
-                                  try {
-                                    // ApiService now returns List<TeacherSearchResult> directly
-                                    return await ApiService.searchTeachers(textEditingValue.text);
-                                  } catch (e) {
-                                    return const Iterable<TeacherSearchResult>.empty();
-                                  }
-                                },
+                      // In lib/admin_course_page.dart
+
+                      optionsBuilder: (TextEditingValue textEditingValue) async {
+                        if (textEditingValue.text.isEmpty) {
+                          return const Iterable<TeacherSearchResult>.empty();
+                        }
+                        try {
+                          // 🔍 Print what we are searching for
+                          print("Searching for: ${textEditingValue.text}");
+
+                          final results = await ApiService.searchTeachers(textEditingValue.text);
+
+                          // 🔍 Print how many results we got
+                          print("Results found: ${results.length}");
+
+                          return results;
+                        } catch (e) {
+                          // 🚨 THIS IS CRITICAL: Print the error so we can see it in the logs
+                          print("❌ Error searching faculty: $e");
+                          return const Iterable<TeacherSearchResult>.empty();
+                        }
+                      },
                                 onSelected: (TeacherSearchResult selection) {
                                   setState(() {
                                     _selectedFacultyName = selection.name;

@@ -24,7 +24,7 @@ class ApiService {
   static Future<List<TeacherSearchResult>> searchTeachers(String query) async {
     if (query.isEmpty) return [];
     final response = await http.get(
-      Uri.parse('$baseUrl/api/users/teachers?search=$query'),
+      Uri.parse('$baseUrl/api/user/teachers?search=$query'),
       headers: await _headers(auth: true),
     );
 
@@ -262,6 +262,8 @@ class ApiService {
   // SECTION 6: USER MANAGEMENT (Existing - Create/Edit/Upload)
   // ===========================================================================
 
+  // In lib/api_service.dart
+
   static Future<Map<String, dynamic>> createUserWithProfile({
     required String name,
     required String email,
@@ -270,50 +272,51 @@ class ApiService {
     required String profilePath,
     required String role,
     required String rollNo,
-    required String semester, // Note: Changed to String to match "S5"
+    required String semester,
     required String section,
     required String branch,
   }) async {
-    final file = File(profilePath);
-    if (!file.existsSync()) throw Exception('Profile file does not exist: $profilePath');
+    // 1. USE '/user' (Singular) to match your App.js configuration
+    // If your route is router.post('/', ...), then use '$baseUrl/user'
+    final uri = Uri.parse('$baseUrl/user');
 
-    final uri = Uri.parse('$baseUrl/api/auth/register'); // Typically register is in auth routes, check your backend
-    // OR if you use the admin add route: '$baseUrl/api/users/add' 
-    // Based on your previous files, register was in /api/auth/register. 
-    // I will default to the one you had in comments:
-    // "POST /api/users/add" based on your comments.
-    // Let's stick to the path you used in your provided code:
-    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/auth/register'));
+    var request = http.MultipartRequest('POST', uri);
 
+    // 2. Add Headers (Auth token if required)
+    final headerMap = await _headers(auth: true);
+    request.headers.addAll(headerMap);
+
+    // 3. Add Text Fields
     request.fields['name'] = name;
     request.fields['email'] = email;
     request.fields['password'] = password;
-    request.fields['dob'] = dob.toIso8601String();
+    request.fields['dob'] = dob.toIso8601String(); // Send standard Date string
     request.fields['role'] = role;
     request.fields['rollNo'] = rollNo;
     request.fields['semester'] = semester;
     request.fields['section'] = section;
     request.fields['branch'] = branch;
 
-    final multipartFile = await http.MultipartFile.fromPath('profile', profilePath); // Changed field name to 'profile' per backend
-    request.files.add(multipartFile);
+    // 4. Add File (Field name MUST be 'profile' to match backend middleware)
+    if (profilePath.isNotEmpty) {
+      request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
+    }
 
-    // No auth headers for registration usually? 
-    // If this is "Admin adds user", include auth. If "Public Register", do not.
-    // Your comment said "Create user (multipart): POST /api/users/add", usually admin only.
-    // But standard register is public. I will check your backend... 
-    // Your backend routes/auth.js has /register. It does NOT use authMiddleware.
-    // So we do NOT add headers.
-    // request.headers.addAll(await _headers(auth: true)); 
+    // 5. Send Request
+    try {
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
 
-    final streamed = await request.send();
-    final res = await http.Response.fromStream(streamed);
+      print("Add User Response: ${response.body}"); // Debugging
 
-    if (res.statusCode == 200 || res.statusCode == 201) {
-      final body = jsonDecode(res.body);
-      return body;
-    } else {
-      throw Exception('Create user failed: ${res.body}');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(response.body);
+      } else {
+        return {'success': false, 'message': 'Error ${response.statusCode}: ${response.body}'};
+      }
+    } catch (e) {
+      print("API Error: $e");
+      return {'success': false, 'message': 'Connection Failed: $e'};
     }
   }
 
