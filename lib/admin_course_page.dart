@@ -30,7 +30,6 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
   final TextEditingController _codeController = TextEditingController();
 
   // This controller is used for the visual text input in the Autocomplete
-  // and acts as a fallback if the admin types a name manually.
   final TextEditingController _facultyTextController = TextEditingController();
 
   // Selected Faculty Data
@@ -93,7 +92,6 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
   Future<void> _addCourse() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Check if we have a name (either selected or typed manually)
     final facultyNameToSend = _selectedFacultyName.isNotEmpty
         ? _selectedFacultyName
         : _facultyTextController.text.trim();
@@ -114,11 +112,10 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
         'semester': _selectedSemester,
         'section': _selectedSection,
         'color': _selectedColorHex,
-        // Faculty Details
         'facultyName': facultyNameToSend,
-        'facultyId': _selectedFacultyId,     // Empty if typed manually
-        'facultyImage': _selectedFacultyImage, // Empty if typed manually
-        'facultyDept': _selectedFacultyDept,   // Empty if typed manually
+        'facultyId': _selectedFacultyId,
+        'facultyImage': _selectedFacultyImage,
+        'facultyDept': _selectedFacultyDept,
       });
 
       if (mounted) {
@@ -153,21 +150,61 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
     }
   }
 
+  // NEW: Delete Course Logic
+  Future<void> _deleteCourse(String courseId) async {
+    // Show Confirmation Dialog
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Course'),
+        content: const Text('Are you sure you want to delete this course? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        await ApiService.deleteCourse(courseId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Course deleted successfully'), backgroundColor: Colors.green),
+          );
+        }
+        _fetchCourses(); // Refresh the list
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
   // --- Helpers ---
 
   ImageProvider? _getImageProvider(String? url) {
-    // 1. Try Network URL
     if (url != null && url.isNotEmpty) {
       return NetworkImage(url);
     }
-    // 2. Try Local Test File (only if it exists)
     try {
       final file = File(_localTestImagePath);
       if (file.existsSync()) {
         return FileImage(file);
       }
     } catch (_) {}
-    // 3. Return null (will trigger fallback icon)
     return null;
   }
 
@@ -298,39 +335,26 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
                             Expanded(
                               child: Autocomplete<TeacherSearchResult>(
                                 displayStringForOption: (TeacherSearchResult option) => option.name,
-                      // In lib/admin_course_page.dart
-
-                      optionsBuilder: (TextEditingValue textEditingValue) async {
-                        if (textEditingValue.text.isEmpty) {
-                          return const Iterable<TeacherSearchResult>.empty();
-                        }
-                        try {
-                          // 🔍 Print what we are searching for
-                          print("Searching for: ${textEditingValue.text}");
-
-                          final results = await ApiService.searchTeachers(textEditingValue.text);
-
-                          // 🔍 Print how many results we got
-                          print("Results found: ${results.length}");
-
-                          return results;
-                        } catch (e) {
-                          // 🚨 THIS IS CRITICAL: Print the error so we can see it in the logs
-                          print("❌ Error searching faculty: $e");
-                          return const Iterable<TeacherSearchResult>.empty();
-                        }
-                      },
+                                optionsBuilder: (TextEditingValue textEditingValue) async {
+                                  if (textEditingValue.text.isEmpty) {
+                                    return const Iterable<TeacherSearchResult>.empty();
+                                  }
+                                  try {
+                                    return await ApiService.searchTeachers(textEditingValue.text);
+                                  } catch (e) {
+                                    return const Iterable<TeacherSearchResult>.empty();
+                                  }
+                                },
                                 onSelected: (TeacherSearchResult selection) {
                                   setState(() {
                                     _selectedFacultyName = selection.name;
                                     _selectedFacultyId = selection.id;
                                     _selectedFacultyImage = selection.image ?? '';
                                     _selectedFacultyDept = selection.dept;
-                                    _facultyTextController.text = selection.name; // Visual sync
+                                    _facultyTextController.text = selection.name;
                                   });
                                 },
                                 fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                  // Sync the internal controller with our external one if it's empty (first load)
                                   if (controller.text.isEmpty && _facultyTextController.text.isNotEmpty) {
                                     controller.text = _facultyTextController.text;
                                   }
@@ -362,8 +386,6 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
                                           : null,
                                     ),
                                     onChanged: (val) {
-                                      // If user modifies text after selection, clear the "Selected Object"
-                                      // allowing them to type a manual name if needed.
                                       if (_selectedFacultyName.isNotEmpty && val != _selectedFacultyName) {
                                         setState(() {
                                           _selectedFacultyName = '';
@@ -383,7 +405,7 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
                                     child: Material(
                                       elevation: 4.0,
                                       child: SizedBox(
-                                        width: MediaQuery.of(context).size.width - 120, // Dynamic width
+                                        width: MediaQuery.of(context).size.width - 120,
                                         child: ListView.builder(
                                           padding: EdgeInsets.zero,
                                           shrinkWrap: true,
@@ -436,14 +458,6 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4, bottom: 12),
-                          child: Text(
-                              'Tip: Select a faculty from the list to link their profile photo.',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 12, fontStyle: FontStyle.italic)
-                          ),
-                        ),
-
                         SizedBox(
                           width: double.infinity,
                           height: 48,
@@ -489,7 +503,6 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
                 itemCount: _courses.length,
                 itemBuilder: (ctx, i) {
                   final c = _courses[i];
-                  // Use stored faculty image if available, else initial
                   final hasImage = c.facultyImage.isNotEmpty;
 
                   return Card(
@@ -505,11 +518,10 @@ class _AdminCoursePageState extends State<AdminCoursePage> {
                       ),
                       title: Text('${c.courseName} (${c.courseCode})', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text('Faculty: ${c.facultyName}'),
+                      // UPDATED: Delete Action
                       trailing: IconButton(
-                        icon: const Icon(Icons.more_vert),
-                        onPressed: () {
-                          // Placeholder for Edit/Delete action
-                        },
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteCourse(c.id),
                       ),
                     ),
                   );

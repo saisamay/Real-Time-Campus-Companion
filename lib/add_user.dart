@@ -5,9 +5,6 @@ import 'api_service.dart';
 import 'package:intl/intl.dart';
 
 class AddUserPage extends StatefulWidget {
-  // If you are passing ApiService instance, keep it. 
-  // If your ApiService uses static methods (as seen in your other files), 
-  // you might not need this parameter, but I'll keep it to match your structure.
   final ApiService? api;
   const AddUserPage({super.key, this.api});
 
@@ -25,7 +22,7 @@ class _AddUserPageState extends State<AddUserPage> {
   String password = '';
   String rollNo = '';
   String branch = '';
-  String semester = ''; // Will be set by dropdown
+  String semester = '';
   String section = '';
   String role = 'student'; // Default role
   DateTime? dob;
@@ -35,6 +32,9 @@ class _AddUserPageState extends State<AddUserPage> {
   // Dropdown Options
   final List<String> _semesterOptions = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'];
   String? _selectedSemester;
+
+  // NEW: Role Options
+  final List<String> _roleOptions = ['student', 'classrep', 'teacher', 'admin', 'staff'];
 
   // --- Image Picking Logic ---
   void _showImageSourceDialog() {
@@ -166,7 +166,7 @@ class _AddUserPageState extends State<AddUserPage> {
           key: _formKey,
           child: Column(
             children: [
-              // 1. Circular Image Editor (WhatsApp Style)
+              // 1. Circular Image Editor
               Center(
                 child: Stack(
                   children: [
@@ -187,7 +187,7 @@ class _AddUserPageState extends State<AddUserPage> {
                           height: 40,
                           width: 40,
                           decoration: const BoxDecoration(
-                            color: Colors.teal, // WhatsApp-like green/teal
+                            color: Colors.teal,
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
@@ -198,6 +198,30 @@ class _AddUserPageState extends State<AddUserPage> {
                 ),
               ),
               const SizedBox(height: 25),
+
+              // NEW: Role Dropdown
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(
+                  labelText: 'Role',
+                  prefixIcon: Icon(Icons.admin_panel_settings_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                value: role,
+                items: _roleOptions.map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value.toUpperCase()),
+                  );
+                }).toList(),
+                onChanged: (newValue) {
+                  if (newValue != null) {
+                    setState(() {
+                      role = newValue;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 15),
 
               // 2. Personal Info
               TextFormField(

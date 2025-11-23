@@ -20,7 +20,6 @@ class ApiService {
   // SECTION 1: HEADERS & TOKENS (Infrastructure)
   // ===========================================================================
 
-  // Add this inside ApiService class
   static Future<List<TeacherSearchResult>> searchTeachers(String query) async {
     if (query.isEmpty) return [];
     final response = await http.get(
@@ -70,7 +69,6 @@ class ApiService {
     await _storage.delete(key: _userRoleKey);
   }
 
-  // Helper getters for current user info
   static Future<String?> readBranch() async => await _storage.read(key: _userBranchKey);
   static Future<String?> readSection() async => await _storage.read(key: _userSectionKey);
   static Future<String?> readSemester() async => await _storage.read(key: _userSemesterKey);
@@ -78,12 +76,12 @@ class ApiService {
 
 
   // ===========================================================================
-  // SECTION 2: COURSES (New)
+  // SECTION 2: COURSES
   // ===========================================================================
 
   static Future<void> addCourse(Map<String, dynamic> courseData) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/api/courses'), // Updated path to include /api prefix if your app.js uses it
+      Uri.parse('$baseUrl/api/courses'),
       headers: await _headers(auth: true),
       body: jsonEncode(courseData),
     );
@@ -107,12 +105,22 @@ class ApiService {
     }
   }
 
+  static Future<void> deleteCourse(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/courses/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete course: ${response.body}');
+    }
+  }
+
 
   // ===========================================================================
-  // SECTION 3: TIMETABLE - ADMIN & SEARCH (New)
+  // SECTION 3: TIMETABLE - ADMIN & SEARCH
   // ===========================================================================
 
-  // Create Timetable (Admin)
   static Future<void> addTimetable(Map<String, dynamic> timetableData) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/timetable'),
@@ -126,7 +134,6 @@ class ApiService {
     }
   }
 
-  // Update Timetable (Admin)
   static Future<void> updateTimetable(Map<String, dynamic> timetableData) async {
     final response = await http.put(
       Uri.parse('$baseUrl/api/timetable'),
@@ -139,7 +146,6 @@ class ApiService {
     }
   }
 
-  // Get Specific Timetable (Admin Edit / Search)
   static Future<Timetable> getTimetable(String branch, String semester, String section) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/timetable?branch=$branch&semester=$semester&section=$section'),
@@ -158,10 +164,9 @@ class ApiService {
 
 
   // ===========================================================================
-  // SECTION 4: TIMETABLE - USERS (Student, Teacher, ClassRep)
+  // SECTION 4: TIMETABLE - USERS
   // ===========================================================================
 
-  // Get My Timetable (Student/ClassRep - Auto Fetch)
   static Future<Timetable> getMyTimetable() async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/timetable/me'),
@@ -176,7 +181,6 @@ class ApiService {
     }
   }
 
-  // Get Teacher Timetable (Personalized View)
   static Future<List<TimetableDay>> getTeacherTimetable() async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/timetable/teacher'),
@@ -192,7 +196,6 @@ class ApiService {
     }
   }
 
-  // Update Single Slot (ClassRep/Teacher - Cancel/RoomChange)
   static Future<void> updateSlot({
     required String semester,
     required String branch,
@@ -223,7 +226,7 @@ class ApiService {
 
 
   // ===========================================================================
-  // SECTION 5: AUTHENTICATION (Existing)
+  // SECTION 5: AUTHENTICATION
   // ===========================================================================
 
   static Future<Map> login(String email, String password) async {
@@ -259,10 +262,8 @@ class ApiService {
 
 
   // ===========================================================================
-  // SECTION 6: USER MANAGEMENT (Existing - Create/Edit/Upload)
+  // SECTION 6: USER MANAGEMENT (Create / Edit / Upload)
   // ===========================================================================
-
-  // In lib/api_service.dart
 
   static Future<Map<String, dynamic>> createUserWithProfile({
     required String name,
@@ -276,46 +277,49 @@ class ApiService {
     required String section,
     required String branch,
   }) async {
-    // 1. USE '/user' (Singular) to match your App.js configuration
-    // If your route is router.post('/', ...), then use '$baseUrl/user'
-    final uri = Uri.parse('$baseUrl/user');
+    // FIX: The route must include '/api/user' to match app.js configuration
+    final uri = Uri.parse('$baseUrl/api/user');
 
     var request = http.MultipartRequest('POST', uri);
 
-    // 2. Add Headers (Auth token if required)
+    // Add Headers (Auth token if needed)
     final headerMap = await _headers(auth: true);
     request.headers.addAll(headerMap);
 
-    // 3. Add Text Fields
+    // Add Text Fields
     request.fields['name'] = name;
     request.fields['email'] = email;
     request.fields['password'] = password;
-    request.fields['dob'] = dob.toIso8601String(); // Send standard Date string
-    request.fields['role'] = role;
+    request.fields['dob'] = dob.toIso8601String();
+    request.fields['role'] = role; // This sends "student", "teacher", etc.
     request.fields['rollNo'] = rollNo;
     request.fields['semester'] = semester;
     request.fields['section'] = section;
     request.fields['branch'] = branch;
 
-    // 4. Add File (Field name MUST be 'profile' to match backend middleware)
+    // Add File
     if (profilePath.isNotEmpty) {
       request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
     }
 
-    // 5. Send Request
+    // Send Request
     try {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
-      print("Add User Response: ${response.body}"); // Debugging
-
+      // Check content type before trying to decode JSON (prevents crashing on HTML errors)
       if (response.statusCode == 200 || response.statusCode == 201) {
         return jsonDecode(response.body);
       } else {
-        return {'success': false, 'message': 'Error ${response.statusCode}: ${response.body}'};
+        // Try to decode error message, or return raw body if not JSON
+        try {
+          final errorJson = jsonDecode(response.body);
+          return {'success': false, 'message': errorJson['message'] ?? errorJson['error'] ?? 'Unknown Error'};
+        } catch (e) {
+          return {'success': false, 'message': 'Server Error ${response.statusCode}: ${response.body}'};
+        }
       }
     } catch (e) {
-      print("API Error: $e");
       return {'success': false, 'message': 'Connection Failed: $e'};
     }
   }
@@ -332,9 +336,6 @@ class ApiService {
     String? section,
     String? branch,
   }) async {
-    // Adjust endpoint to your backend. 
-    // If you use the `editUser.js` logic, you might need a route for it.
-    // Assuming standard user route:
     final uri = Uri.parse('$baseUrl/api/user/edit');
     final request = http.MultipartRequest('PUT', uri);
 
