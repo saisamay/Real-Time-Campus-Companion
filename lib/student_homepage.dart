@@ -722,7 +722,14 @@ class _StudentHomePageState extends State<StudentHomePage>
         onPageChanged: (i) => setState(() => _index = i),
         children: [
           _homePage(context),
-          const StudentTimetablePage(embedded: true),
+
+          StudentTimetablePage(
+            embedded: true,
+            initialBranch: selectedDept,    // Student Home already has this info
+            initialSemester: selectedSemester,
+            initialSection: selectedSection,
+            userRole: 'student',
+          ),
           const EventsPage(),
           const EmptyClassroomsPage(),
           ProfilePage(

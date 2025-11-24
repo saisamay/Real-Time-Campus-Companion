@@ -29,7 +29,9 @@ class ApiService {
 
     if (response.statusCode == 200) {
       List jsonResponse = json.decode(response.body);
-      return jsonResponse.map((item) => TeacherSearchResult.fromJson(item)).toList();
+      return jsonResponse
+          .map((item) => TeacherSearchResult.fromJson(item))
+          .toList();
     } else {
       throw Exception('Failed to search teachers');
     }
@@ -44,16 +46,25 @@ class ApiService {
     return headers;
   }
 
-  static Future<void> saveToken(String token) async => await _storage.write(key: _tokenKey, value: token);
-  static Future<String?> readToken() async => await _storage.read(key: _tokenKey);
-  static Future<void> deleteToken() async => await _storage.delete(key: _tokenKey);
+  static Future<void> saveToken(String token) async =>
+      await _storage.write(key: _tokenKey, value: token);
+
+  static Future<String?> readToken() async =>
+      await _storage.read(key: _tokenKey);
+
+  static Future<void> deleteToken() async =>
+      await _storage.delete(key: _tokenKey);
 
   static Future<void> saveUserProfile(Map<String, dynamic> user) async {
     await _storage.write(key: _userKey, value: jsonEncode(user));
-    if (user['branch'] != null) await _storage.write(key: _userBranchKey, value: user['branch'].toString());
-    if (user['section'] != null) await _storage.write(key: _userSectionKey, value: user['section'].toString());
-    if (user['semester'] != null) await _storage.write(key: _userSemesterKey, value: user['semester'].toString());
-    if (user['role'] != null) await _storage.write(key: _userRoleKey, value: user['role'].toString());
+    if (user['branch'] != null) await _storage.write(
+        key: _userBranchKey, value: user['branch'].toString());
+    if (user['section'] != null) await _storage.write(
+        key: _userSectionKey, value: user['section'].toString());
+    if (user['semester'] != null) await _storage.write(
+        key: _userSemesterKey, value: user['semester'].toString());
+    if (user['role'] != null) await _storage.write(
+        key: _userRoleKey, value: user['role'].toString());
   }
 
   static Future<Map<String, dynamic>?> readUserProfile() async {
@@ -69,10 +80,17 @@ class ApiService {
     await _storage.delete(key: _userRoleKey);
   }
 
-  static Future<String?> readBranch() async => await _storage.read(key: _userBranchKey);
-  static Future<String?> readSection() async => await _storage.read(key: _userSectionKey);
-  static Future<String?> readSemester() async => await _storage.read(key: _userSemesterKey);
-  static Future<String?> readRole() async => await _storage.read(key: _userRoleKey);
+  static Future<String?> readBranch() async =>
+      await _storage.read(key: _userBranchKey);
+
+  static Future<String?> readSection() async =>
+      await _storage.read(key: _userSectionKey);
+
+  static Future<String?> readSemester() async =>
+      await _storage.read(key: _userSemesterKey);
+
+  static Future<String?> readRole() async =>
+      await _storage.read(key: _userRoleKey);
 
 
   // ===========================================================================
@@ -91,9 +109,11 @@ class ApiService {
     }
   }
 
-  static Future<List<Course>> getCourses(String branch, String semester, String section) async {
+  static Future<List<Course>> getCourses(String branch, String semester,
+      String section) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/courses?branch=$branch&semester=$semester&section=$section'),
+      Uri.parse(
+          '$baseUrl/api/courses?branch=$branch&semester=$semester&section=$section'),
       headers: await _headers(auth: true),
     );
 
@@ -134,7 +154,8 @@ class ApiService {
     }
   }
 
-  static Future<void> updateTimetable(Map<String, dynamic> timetableData) async {
+  static Future<void> updateTimetable(
+      Map<String, dynamic> timetableData) async {
     final response = await http.put(
       Uri.parse('$baseUrl/api/timetable'),
       headers: await _headers(auth: true),
@@ -146,9 +167,11 @@ class ApiService {
     }
   }
 
-  static Future<Timetable> getTimetable(String branch, String semester, String section) async {
+  static Future<Timetable> getTimetable(String branch, String semester,
+      String section) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/timetable?branch=$branch&semester=$semester&section=$section'),
+      Uri.parse(
+          '$baseUrl/api/timetable?branch=$branch&semester=$semester&section=$section'),
       headers: await _headers(auth: true),
     );
 
@@ -234,10 +257,13 @@ class ApiService {
     final res = await http.post(url,
         headers: await _headers(),
         body: jsonEncode({'email': email, 'password': password}));
-    final body = res.body.isNotEmpty ? jsonDecode(res.body) as Map<String, dynamic> : {};
+    final body = res.body.isNotEmpty ? jsonDecode(res.body) as Map<
+        String,
+        dynamic> : {};
     if (res.statusCode == 200) {
       if (body['token'] != null) await saveToken(body['token']);
-      if (body['user'] != null) await saveUserProfile(body['user'] as Map<String, dynamic>);
+      if (body['user'] != null) await saveUserProfile(
+          body['user'] as Map<String, dynamic>);
       return body;
     } else {
       throw Exception(body['error'] ?? 'Login failed (${res.statusCode})');
@@ -295,7 +321,8 @@ class ApiService {
     request.fields['branch'] = branch;
 
     if (profilePath.isNotEmpty) {
-      request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
+      request.files.add(
+          await http.MultipartFile.fromPath('profile', profilePath));
     }
 
     try {
@@ -307,9 +334,16 @@ class ApiService {
       } else {
         try {
           final errorJson = jsonDecode(response.body);
-          return {'success': false, 'message': errorJson['message'] ?? errorJson['error'] ?? 'Unknown Error'};
+          return {
+            'success': false,
+            'message': errorJson['message'] ?? errorJson['error'] ??
+                'Unknown Error'
+          };
         } catch (e) {
-          return {'success': false, 'message': 'Server Error ${response.statusCode}: ${response.body}'};
+          return {
+            'success': false,
+            'message': 'Server Error ${response.statusCode}: ${response.body}'
+          };
         }
       }
     } catch (e) {
@@ -351,7 +385,8 @@ class ApiService {
 
     if (name != null) request.fields['name'] = name;
     if (email != null) request.fields['email'] = email;
-    if (password != null && password.isNotEmpty) request.fields['password'] = password;
+    if (password != null && password.isNotEmpty)
+      request.fields['password'] = password;
     if (dob != null) request.fields['dob'] = dob.toIso8601String();
     if (role != null) request.fields['role'] = role;
     if (rollNo != null) request.fields['rollNo'] = rollNo;
@@ -360,7 +395,8 @@ class ApiService {
     if (branch != null) request.fields['branch'] = branch;
 
     if (profilePath != null && profilePath.isNotEmpty) {
-      request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
+      request.files.add(
+          await http.MultipartFile.fromPath('profile', profilePath));
     }
 
     final streamedResponse = await request.send();
@@ -456,6 +492,48 @@ class ApiService {
       throw Exception('Failed to delete event');
     }
   }
+
+
+// ===========================================================================
+// SECTION 8: CLASSROOMS (Real-Time Status)
+// ===========================================================================
+
+  static Future<List<dynamic>> getClassroomStatus() async {
+// We pass the current day and slot index so the backend knows what to check
+    final now = DateTime.now();
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+// Note: Adjust logic if your backend expects 0-based or 1-based index
+// This simple logic gets the current day string
+    String dayName = days[now.weekday - 1];
+
+// Simple slot calculation (You can make this more robust)
+    int slotIndex = _calculateCurrentSlotIndex();
+
+    final response = await http.get(
+      Uri.parse(
+          '$baseUrl/api/classrooms/status?day=$dayName&slotIndex=$slotIndex'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json['data'];
+    } else {
+      throw Exception('Failed to load classroom status');
+    }
+  }
+
+  static int _calculateCurrentSlotIndex() {
+// Helper to roughly guess the slot based on hour (9AM = 0, 10AM = 1, etc.)
+// You can refine this based on your exact bell schedule
+    final hour = DateTime
+        .now()
+        .hour;
+    if (hour < 9) return 0;
+    if (hour > 17) return 8;
+    return hour - 9;
+  }
 }
+
 
 // Add this to your api_service.dart file

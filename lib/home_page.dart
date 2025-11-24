@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:intl/intl.dart'; // Required for time logic
 import 'api_service.dart';
 import 'timetable_model.dart';
 import 'find_teacher_page.dart';
@@ -50,7 +49,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   late String userEmail;
   late bool _isDark;
 
-  // Timetable State
+  // Timetable State for Next Class Card
   Timetable? _fullTimetable;
   bool _isLoadingTimetable = true;
 
@@ -60,7 +59,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     'https://picsum.photos/1200/600?random=3',
   ];
 
-  // Slot start times (24h format)
+  // Slot start times (24h format) matches student_timetable_page
   final List<String> _slotStartTimes = [
     '09:00', '09:50', '10:50', '11:40', '12:30', '13:20', '14:10', '15:10', '16:00'
   ];
@@ -69,6 +68,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _index);
+    // Initialize with data passed from Login/Main
     selectedDept = (widget.branch ?? 'EEE').toUpperCase();
     selectedSection = (widget.section ?? 'A').toUpperCase();
     selectedSemester = (widget.semester ?? '5');
@@ -81,6 +81,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Future<void> _fetchTimetable() async {
     try {
+      // Use the CR's class details to fetch the timetable for the Dashboard card
       final timetable = await ApiService.getTimetable(
         selectedDept,
         selectedSemester,
@@ -115,7 +116,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   void _updateUserName(String name) => setState(() => userName = name);
   void _updateUserEmail(String email) => setState(() => userEmail = email);
-  void _updateTheme(bool isDark) => setState(() => _isDark = isDark);
 
   // --- LOGIC TO FIND NEXT CLASS ---
   Map<String, dynamic>? _getNextClassInfo() {
@@ -136,11 +136,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     if (todayWeekdayIndex >= 0 && todayWeekdayIndex < 5) {
       String todayName = days[todayWeekdayIndex];
       final todayData = _fullTimetable!.grid.firstWhere(
-              (d) => d.dayName == todayName,
-          orElse: () => TimetableDay(dayName: '', slots: [])
+            (d) => d.dayName == todayName,
+        orElse: () => TimetableDay(dayName: '', slots: []),
       );
 
       for (int i = 0; i < _slotStartTimes.length; i++) {
+        // If slot hasn't passed yet
         if (toMinutes(_slotStartTimes[i]) > currentMinutes) {
           if (i < todayData.slots.length) {
             final slot = todayData.slots[i];
@@ -156,14 +157,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       }
     }
 
-    // 2. Check Tomorrow
+    // 2. Check Tomorrow (or Monday if today is Fri/Sat/Sun)
     int nextDayIndex = (todayWeekdayIndex + 1) % 7;
     if (nextDayIndex > 4) nextDayIndex = 0;
 
     String nextDayName = days[nextDayIndex];
     final nextDayData = _fullTimetable!.grid.firstWhere(
-            (d) => d.dayName == nextDayName,
-        orElse: () => TimetableDay(dayName: '', slots: [])
+          (d) => d.dayName == nextDayName,
+      orElse: () => TimetableDay(dayName: '', slots: []),
     );
 
     for (int i = 0; i < nextDayData.slots.length; i++) {
@@ -299,7 +300,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Widget _buildNextClassCard(ColorScheme scheme, bool isDark) {
     if (_isLoadingTimetable) {
-      return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+      return const Center(
+          child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator()));
     }
 
     final nextClass = _getNextClassInfo();
@@ -314,10 +318,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           gradient: bgGradient,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: scheme.shadow.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [
+            BoxShadow(
+                color: scheme.shadow.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4))
+          ],
         ),
         child: const Center(
-          child: Text("No upcoming classes found.", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+          child: Text("No upcoming classes found.",
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600)),
         ),
       );
     }
@@ -326,7 +339,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final String time = nextClass['time'];
     final String day = nextClass['day'];
 
-    final String displayRoom = (slot.newRoom != null && slot.newRoom!.isNotEmpty)
+    final String displayRoom =
+    (slot.newRoom != null && slot.newRoom!.isNotEmpty)
         ? slot.newRoom!
         : (slot.room.isNotEmpty ? slot.room : "TBA");
 
@@ -336,7 +350,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: isCancelled
-            ? LinearGradient(colors: [Colors.red.shade400, Colors.red.shade700])
+            ? LinearGradient(
+            colors: [Colors.red.shade400, Colors.red.shade700])
             : bgGradient,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -361,20 +376,31 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.event_available, color: Colors.white, size: 14),
+                    const Icon(Icons.event_available,
+                        color: Colors.white, size: 14),
                     const SizedBox(width: 6),
                     Text(
                       "$day @ $time",
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12),
                     ),
                   ],
                 ),
               ),
               if (isCancelled)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                  child: const Text("CANCELLED", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: const Text("CANCELLED",
+                      style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10)),
                 )
             ],
           ),
@@ -392,26 +418,40 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 4),
           Text(
-            slot.facultyName.isNotEmpty ? slot.facultyName : "Faculty not assigned",
-            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
+            slot.facultyName.isNotEmpty
+                ? slot.facultyName
+                : "Faculty not assigned",
+            style:
+            TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
           ),
           const SizedBox(height: 16),
           const Divider(color: Colors.white24),
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.location_on_rounded, color: Colors.white.withOpacity(0.9), size: 18),
+              Icon(Icons.location_on_rounded,
+                  color: Colors.white.withOpacity(0.9), size: 18),
               const SizedBox(width: 8),
               Text(
                 "Room: $displayRoom",
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15),
               ),
               if (slot.newRoom != null) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)),
-                  child: const Text("UPDATED", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(4)),
+                  child: const Text("UPDATED",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold)),
                 )
               ]
             ],
@@ -722,7 +762,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         onPageChanged: (i) => setState(() => _index = i),
         children: [
           _homePage(context),
-          const StudentTimetablePage(embedded: true),
+          // FIXED: Pass parameters without using 'const' because variables are non-constant
+          StudentTimetablePage(
+            embedded: true,
+            initialBranch: selectedDept,
+            initialSemester: selectedSemester,
+            initialSection: selectedSection,
+            userRole: 'classrep',
+          ),
           const EventsPage(),
           const EmptyClassroomsPage(),
           ProfilePage(

@@ -625,7 +625,9 @@ class _TeachersHomeState extends State<TeachersHome>
         onPageChanged: (index) => setState(() => _currentIndex = index),
         children: [
           _buildHome(),
-          const StudentTimetablePage(embedded: true),
+          const StudentTimetablePage(
+            userRole: 'teacher',
+          ),
           const EmptyClassroomsPage(),
           _teacherProfile(context),
         ],

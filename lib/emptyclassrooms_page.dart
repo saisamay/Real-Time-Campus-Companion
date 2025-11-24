@@ -1,29 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-
-/// -----------------
-/// ClassroomStatus model (from backend)
-/// -----------------
-class ClassroomStatus {
-  final String name;
-  final bool isOccupied;
-  final Map<String, dynamic>? currentClass; // info about who is inside
-
-  ClassroomStatus({
-    required this.name,
-    required this.isOccupied,
-    this.currentClass,
-  });
-
-  factory ClassroomStatus.fromJson(Map<String, dynamic> json) {
-    return ClassroomStatus(
-      name: json['name'] as String,
-      isOccupied: json['isOccupied'] ?? false,
-      currentClass: json['currentClass'] is Map ? json['currentClass'] as Map<String, dynamic> : null,
-    );
-  }
-}
+import 'api_service.dart';
 
 class EmptyClassroomsPage extends StatefulWidget {
   const EmptyClassroomsPage({super.key});
@@ -35,71 +11,16 @@ class EmptyClassroomsPage extends StatefulWidget {
 class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
+
+  // Data State
+  List<dynamic> _allClassrooms = [];
+  bool _isLoading = true;
+  String? _error;
+
+  // Filter State
   String selectedFloor = 'All Floors';
-  String selectedType = 'All';
+  String selectedType = 'All'; // 'Class' or 'Lab'
   String searchQuery = '';
-
-  // ---------------------------------------------------------------------------
-  // CONFIG: update baseUrl and auth header function to match your backend
-  // ---------------------------------------------------------------------------
-  static const String baseUrl = 'https://your-api.example.com/api'; // <-- update
-  Map<String, String> getAuthHeaders() {
-    // TODO: replace with your actual auth token retrieval logic
-    return {
-      'Content-Type': 'application/json',
-      //'Authorization': 'Bearer $token',
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // DUMMY DATA: This Map simulates the Database.
-  // TODO: Replace this with data fetched from your Backend API (/classrooms/status)
-  // Structure: 'RoomCode' : { 'occupied': bool, 'branch': String?, 'section': String? }
-  // ---------------------------------------------------------------------------
-  final Map<String, Map<String, dynamic>> _roomStatus = {
-    'N001': {'occupied': true, 'branch': 'CSE', 'section': 'A'},
-    'N002': {'occupied': true, 'branch': 'ECE', 'section': 'B'},
-    'N005': {'occupied': true, 'branch': 'MECH', 'section': 'A'},
-    'S003': {'occupied': true, 'branch': 'CSE', 'section': 'B'},
-    'S007': {'occupied': true, 'branch': 'EEE', 'section': 'A'},
-    // ... add more dummy data if needed for testing
-  };
-
-  // Generate classrooms dynamically for UI testing
-  List<Map<String, dynamic>> _generateClassrooms() {
-    final List<Map<String, dynamic>> classrooms = [];
-    final floors = ['1st Floor', '2nd Floor', '3rd Floor'];
-    final wings = ['N', 'S'];
-
-    for (int floorIndex = 0; floorIndex < floors.length; floorIndex++) {
-      for (String wing in wings) {
-        // Generate 11 classrooms per wing per floor
-        for (int roomNum = 0; roomNum <= 10; roomNum++) {
-          final roomCode =
-              '$wing$floorIndex${roomNum.toString().padLeft(2, '0')}';
-          classrooms.add({
-            'name': roomCode,
-            'floor': floors[floorIndex],
-            'capacity': 50 + (roomNum * 5),
-            'type': 'Class',
-            'wing': wing,
-          });
-        }
-        // Add 2 labs
-        for (int labNum = 1; labNum <= 2; labNum++) {
-          final labCode = '$wing$floorIndex${(10 + labNum).toString()}L';
-          classrooms.add({
-            'name': labCode,
-            'floor': floors[floorIndex],
-            'capacity': 30 + (labNum * 5),
-            'type': 'Lab',
-            'wing': wing,
-          });
-        }
-      }
-    }
-    return classrooms;
-  }
 
   @override
   void initState() {
@@ -110,8 +31,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
     );
     _animationController.forward();
 
-    // Fetch live classroom statuses on load (safe: errors are caught)
-    fetchClassrooms();
+    _fetchData();
   }
 
   @override
@@ -120,163 +40,78 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
     super.dispose();
   }
 
-  List<Map<String, dynamic>> get filteredClassrooms {
-    final allClassrooms = _generateClassrooms();
-    return allClassrooms.where((room) {
-      final matchesFloor =
-          selectedFloor == 'All Floors' || room['floor'] == selectedFloor;
-      final matchesType = selectedType == 'All' || room['type'] == selectedType;
-      final matchesSearch = room['name'].toLowerCase().contains(
-        searchQuery.toLowerCase(),
-      );
-      return matchesFloor && matchesType && matchesSearch;
+  Future<void> _fetchData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      // Fetch live data calculated from Timetable + Classroom DB
+      final data = await ApiService.getClassroomStatus();
+      if (mounted) {
+        setState(() {
+          _allClassrooms = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  // --- Logic to Filter the List ---
+  List<dynamic> get filteredClassrooms {
+    return _allClassrooms.where((room) {
+      final name = (room['name'] ?? '').toString().toUpperCase();
+      final type = (room['type'] ?? 'Class').toString();
+      final floor = (room['floor'] ?? '').toString();
+
+      // 1. Search
+      if (searchQuery.isNotEmpty && !name.contains(searchQuery.toUpperCase())) {
+        return false;
+      }
+
+      // 2. Floor Filter
+      if (selectedFloor != 'All Floors') {
+        // If your DB stores "1st Floor", match it.
+        // If it stores just "1", you might need to adjust this check.
+        if (floor != selectedFloor && !name.startsWith(selectedFloor[0])) {
+          // Fallback: check if room name starts with floor number (e.g. "101" starts with "1")
+          return false;
+        }
+      }
+
+      // 3. Type Filter
+      if (selectedType != 'All') {
+        // Simple normalization to match "Class" vs "Classroom"
+        if (!type.contains(selectedType)) return false;
+      }
+
+      return true;
     }).toList();
   }
 
-  int get occupiedCount =>
-      _roomStatus.values.where((status) => status['occupied'] == true).length;
+  int get occupiedCount => _allClassrooms.where((r) => r['isOccupied'] == true).length;
+  int get availableCount => _allClassrooms.length - occupiedCount;
 
-  int get availableCount {
-    final totalRooms = _generateClassrooms().length;
-    return totalRooms - occupiedCount;
-  }
-
-  // ---------------------------------------------------------------------------
-  // FETCH from backend and update _roomStatus map.
-  // This merges the backend response with your existing UI map.
-  // ---------------------------------------------------------------------------
-  Future<void> fetchClassrooms() async {
-    try {
-      // Calculate current Day and Slot index dynamically in Dart
-      String currentDay = _getCurrentDayName(); // e.g., "Monday"
-      int slotIndex = _getCurrentSlotIndex(); // e.g., 2 for 10:40 AM
-
-      final uri = Uri.parse(
-        "$baseUrl/classrooms/status?day=$currentDay&slotIndex=$slotIndex",
-      );
-
-      final response = await http.get(uri, headers: getAuthHeaders());
-
-      if (response.statusCode == 200) {
-        final body = json.decode(response.body);
-        // Expecting backend: { success: true, data: [ { name, isOccupied, currentClass }, ... ] }
-        final List<dynamic>? data = body['data'] as List<dynamic>?;
-
-        if (data != null) {
-          // Convert and merge into _roomStatus
-          setState(() {
-            for (final item in data) {
-              try {
-                final cs = ClassroomStatus.fromJson(item as Map<String, dynamic>);
-                _roomStatus[cs.name] = {
-                  'occupied': cs.isOccupied,
-                  'branch': cs.currentClass?['branch'],
-                  'section': cs.currentClass?['section'],
-                  // you can store the whole currentClass if needed:
-                  'currentClass': cs.currentClass,
-                };
-              } catch (e) {
-                // If any single item fails parsing, skip it gracefully
-                // ignore and continue
-              }
-            }
-          });
-        }
-      } else {
-        // Non-200 responses — keep existing dummy data and log for debug
-        // You may want to show a SnackBar or silent fallback depending on UX
-        // print('Fetch classrooms failed: ${response.statusCode} ${response.body}');
-      }
-    } catch (e) {
-      // Network / parsing errors — ignore and keep dummy data
-      // print('Error fetching classrooms: $e');
-    }
-  }
-
-  // Very simple day/slot helpers.
-  // Adapt the times/slot boundaries to match your backend's slot indexing.
-  String _getCurrentDayName() {
-    final now = DateTime.now();
-    switch (now.weekday) {
-      case DateTime.monday:
-        return 'Mon';
-      case DateTime.tuesday:
-        return 'Tue';
-      case DateTime.wednesday:
-        return 'Wed';
-      case DateTime.thursday:
-        return 'Thu';
-      case DateTime.friday:
-        return 'Fri';
-      case DateTime.saturday:
-        return 'Sat';
-      case DateTime.sunday:
-      default:
-        return 'Mon';
-    }
-  }
-
-  int _getCurrentSlotIndex() {
-    final now = DateTime.now();
-    final minutes = now.hour * 60 + now.minute;
-
-    // Example slot boundaries (customize to your institute's timing):
-    // slot 0: 08:00 - 08:45  (480 - 525)
-    // slot 1: 08:50 - 09:35
-    // slot 2: 09:40 - 10:25
-    // slot 3: 10:30 - 11:15
-    // slot 4: 11:20 - 12:05
-    // slot 5: 12:10 - 12:55
-    // slot 6: 13:00 - 13:45
-    // slot 7: 14:00 - 14:45
-    // slot 8: 14:50 - 15:35
-    // Adjust these ranges to match your backend's expectations.
-
-    final ranges = <List<int>>[
-      [8 * 60, 8 * 60 + 45],
-      [8 * 60 + 50, 9 * 60 + 35],
-      [9 * 60 + 40, 10 * 60 + 25],
-      [10 * 60 + 30, 11 * 60 + 15],
-      [11 * 60 + 20, 12 * 60 + 5],
-      [12 * 60 + 10, 12 * 60 + 55],
-      [13 * 60, 13 * 60 + 45],
-      [14 * 60, 14 * 60 + 45],
-      [14 * 60 + 50, 15 * 60 + 35],
-    ];
-
-    for (int i = 0; i < ranges.length; i++) {
-      final start = ranges[i][0];
-      final end = ranges[i][1];
-      if (minutes >= start && minutes <= end) return i;
-    }
-
-    // fallback slot index if outside timings
-    return 0;
-  }
-
-  // ---------------------------------------------------------------------------
-  // UI BUILDER METHODS
-  // ---------------------------------------------------------------------------
+  // --- UI BUILDER METHODS ---
 
   void _showFilterDialog() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
-              Icon(
-                Icons.filter_list,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              Icon(Icons.filter_list, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 12),
-              const Text(
-                'Filter by Type',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              const Text('Filter by Type', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
           content: Column(
@@ -300,33 +135,23 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
 
     return InkWell(
       onTap: () {
-        setState(() {
-          selectedType = type;
-        });
+        setState(() => selectedType = type);
         Navigator.pop(context);
       },
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected
-              ? scheme.primaryContainer
-              : scheme.surfaceContainerHighest,
+          color: isSelected ? scheme.primaryContainer : scheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? scheme.primary
-                : scheme.outlineVariant.withOpacity(0.5),
+            color: isSelected ? scheme.primary : scheme.outlineVariant.withOpacity(0.5),
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
-              size: 24,
-            ),
+            Icon(icon, color: isSelected ? scheme.primary : scheme.onSurfaceVariant, size: 24),
             const SizedBox(width: 12),
             Text(
               type,
@@ -337,8 +162,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
               ),
             ),
             const Spacer(),
-            if (isSelected)
-              Icon(Icons.check_circle, color: scheme.primary, size: 24),
+            if (isSelected) Icon(Icons.check_circle, color: scheme.primary, size: 24),
           ],
         ),
       ),
@@ -357,6 +181,8 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
             expandedHeight: 160,
             pinned: true,
             actions: [
+              // Refresh Button
+              IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _fetchData),
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: Container(
@@ -370,22 +196,15 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                         const Icon(Icons.filter_list, color: Colors.white),
                         if (selectedType != 'All')
                           Positioned(
-                            right: 0,
-                            top: 0,
+                            right: 0, top: 0,
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFEF4444),
                                 shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 1.5,
-                                ),
+                                border: Border.all(color: Colors.white, width: 1.5),
                               ),
-                              constraints: const BoxConstraints(
-                                minWidth: 8,
-                                minHeight: 8,
-                              ),
+                              constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
                             ),
                           ),
                       ],
@@ -418,46 +237,31 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                 child: Stack(
                   children: [
                     Positioned(
-                      right: -50,
-                      top: -50,
-                      child: Icon(
-                        Icons.meeting_room,
-                        size: 180,
-                        color: Colors.white.withOpacity(0.1),
-                      ),
+                      right: -50, top: -50,
+                      child: Icon(Icons.meeting_room, size: 180, color: Colors.white.withOpacity(0.1)),
                     ),
                   ],
                 ),
               ),
             ),
           ),
+
+          // --- STATS & SEARCH ---
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  if (_isLoading) const LinearProgressIndicator(),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
-                        child: _buildStatCard(
-                          context,
-                          'Occupied',
-                          occupiedCount.toString(),
-                          Icons.door_front_door,
-                          const Color(0xFFEF4444),
-                          isDark,
-                        ),
+                        child: _buildStatCard(context, 'Occupied', occupiedCount.toString(), Icons.door_front_door, const Color(0xFFEF4444), isDark),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _buildStatCard(
-                          context,
-                          'Available',
-                          availableCount.toString(),
-                          Icons.meeting_room_outlined,
-                          const Color(0xFF10B981),
-                          isDark,
-                        ),
+                        child: _buildStatCard(context, 'Available', availableCount.toString(), Icons.meeting_room_outlined, const Color(0xFF10B981), isDark),
                       ),
                     ],
                   ),
@@ -473,10 +277,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide.none,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 16,
-                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -495,9 +296,17 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
               ),
             ),
           ),
+
+          // --- CLASSROOM GRID ---
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            sliver: SliverGrid(
+            sliver: _isLoading
+                ? const SliverToBoxAdapter(child: SizedBox.shrink())
+                : _error != null
+                ? SliverToBoxAdapter(child: Center(child: Text("Error loading data: $_error")))
+                : filteredClassrooms.isEmpty
+                ? const SliverToBoxAdapter(child: Center(child: Text("No Classrooms Found")))
+                : SliverGrid(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 childAspectRatio: 0.85,
@@ -516,8 +325,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
     );
   }
 
-  Widget _buildStatCard(BuildContext context, String label, String value,
-      IconData icon, Color color, bool isDark) {
+  Widget _buildStatCard(BuildContext context, String label, String value, IconData icon, Color color, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -528,11 +336,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.4),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
+          BoxShadow(color: color.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 6)),
         ],
       ),
       child: Column(
@@ -540,22 +344,8 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
         children: [
           Icon(icon, color: Colors.white, size: 28),
           const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.white.withOpacity(0.9),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text(label, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -581,19 +371,19 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
     );
   }
 
-  Widget _buildClassroomCard(
-      BuildContext context,
-      Map<String, dynamic> room,
-      bool isDark,
-      ) {
-    final roomName = room['name'];
-    final roomStatus = _roomStatus[roomName];
-    final isOccupied = roomStatus?['occupied'] == true;
-    final isLab = room['type'] == 'Lab';
+  Widget _buildClassroomCard(BuildContext context, Map<String, dynamic> room, bool isDark) {
+    // Data Extraction
+    final roomName = room['name'] ?? 'Unknown';
+    final isOccupied = room['isOccupied'] == true;
+    final isLab = (room['type'] ?? '').toString().contains('Lab');
+    final capacity = room['capacity'] ?? 0;
+    final floor = room['floor'] ?? 'Unknown';
 
-    final statusColor = isOccupied
-        ? const Color(0xFFEF4444)
-        : const Color(0xFF10B981);
+    // Details if occupied
+    final currentClass = room['currentClass'];
+    final className = currentClass != null ? currentClass['className'] : null;
+
+    final statusColor = isOccupied ? const Color(0xFFEF4444) : const Color(0xFF10B981);
     final scheme = Theme.of(context).colorScheme;
 
     return InkWell(
@@ -605,26 +395,18 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: statusColor.withOpacity(0.3), width: 2),
           boxShadow: [
-            BoxShadow(
-              color: statusColor.withOpacity(0.2),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
+            BoxShadow(color: statusColor.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4)),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Status Bar
             Container(
               height: 8,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [statusColor, statusColor.withOpacity(0.6)],
-                ),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(18),
-                  topRight: Radius.circular(18),
-                ),
+                gradient: LinearGradient(colors: [statusColor, statusColor.withOpacity(0.6)]),
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
               ),
             ),
             Expanded(
@@ -636,6 +418,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        // Icon Box
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
@@ -643,129 +426,61 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            isLab
-                                ? Icons.science_rounded
-                                : (isOccupied
-                                ? Icons.door_front_door
-                                : Icons.meeting_room_outlined),
+                            isLab ? Icons.science_rounded : (isOccupied ? Icons.door_front_door : Icons.meeting_room_outlined),
                             color: statusColor,
                             size: 24,
                           ),
                         ),
+                        // Status Badge
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: statusColor.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             isOccupied ? 'OCCUPIED' : 'AVAILABLE',
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ),
                     const Spacer(),
-                    Text(
-                      roomName,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: scheme.onSurface,
-                      ),
-                    ),
+                    Text(roomName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: scheme.onSurface)),
                     const SizedBox(height: 4),
+                    // Type Badge
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 3,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                       decoration: BoxDecoration(
-                        color: isLab
-                            ? const Color(0xFFFF9800).withOpacity(0.15)
-                            : const Color(0xFF00ACC1).withOpacity(0.15),
+                        color: isLab ? const Color(0xFFFF9800).withOpacity(0.15) : const Color(0xFF00ACC1).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            isLab ? Icons.science_rounded : Icons.class_rounded,
-                            size: 11,
-                            color: isLab
-                                ? const Color(0xFFFF9800)
-                                : const Color(0xFF00ACC1),
-                          ),
+                          Icon(isLab ? Icons.science_rounded : Icons.class_rounded, size: 11, color: isLab ? const Color(0xFFFF9800) : const Color(0xFF00ACC1)),
                           const SizedBox(width: 3),
-                          Text(
-                            room['type'],
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isLab
-                                  ? const Color(0xFFFF9800)
-                                  : const Color(0xFF00ACC1),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          Text(room['type'] ?? 'Class', style: TextStyle(fontSize: 10, color: isLab ? const Color(0xFFFF9800) : const Color(0xFF00ACC1), fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
                     const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        Icon(Icons.layers,
-                            size: 12, color: scheme.onSurfaceVariant),
-                        const SizedBox(width: 3),
-                        Text(
-                          room['floor'],
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
+                    Row(children: [Icon(Icons.layers, size: 12, color: scheme.onSurfaceVariant), const SizedBox(width: 3), Text(floor, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant))]),
                     const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Icon(Icons.people,
-                            size: 12, color: scheme.onSurfaceVariant),
-                        const SizedBox(width: 3),
-                        Text(
-                          '${room['capacity']} seats',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (isOccupied && roomStatus != null) ...[
+                    Row(children: [Icon(Icons.people, size: 12, color: scheme.onSurfaceVariant), const SizedBox(width: 3), Text('$capacity seats', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant))]),
+
+                    // Occupant Info (If Occupied)
+                    if (isOccupied && className != null) ...[
                       const SizedBox(height: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
                           color: scheme.errorContainer.withOpacity(0.5),
                           borderRadius: BorderRadius.circular(5),
                         ),
-                        // Safe check for nulls since we removed user inputs
                         child: Text(
-                          '${roomStatus['branch'] ?? 'Manual'}-${roomStatus['section'] ?? 'Booking'}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: scheme.onErrorContainer,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          className,
+                          style: TextStyle(fontSize: 10, color: scheme.onErrorContainer, fontWeight: FontWeight.w600),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -782,14 +497,11 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
   }
 
   void _showClassroomDetails(BuildContext context, Map<String, dynamic> room) {
-    final roomName = room['name'];
-    final roomStatus = _roomStatus[roomName];
-    final isOccupied = roomStatus?['occupied'] == true;
-    final isAvailable = !isOccupied;
+    final roomName = room['name'] ?? 'Unknown';
+    final isOccupied = room['isOccupied'] == true;
+    final currentClass = room['currentClass'];
 
-    final statusColor = isOccupied
-        ? const Color(0xFFEF4444)
-        : const Color(0xFF10B981);
+    final statusColor = isOccupied ? const Color(0xFFEF4444) : const Color(0xFF10B981);
     final scheme = Theme.of(context).colorScheme;
 
     showModalBottomSheet(
@@ -806,64 +518,26 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: scheme.onSurfaceVariant.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: scheme.onSurfaceVariant.withOpacity(0.4), borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 24),
             Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    isOccupied
-                        ? Icons.door_front_door
-                        : Icons.meeting_room_outlined,
-                    color: statusColor,
-                    size: 32,
-                  ),
+                  decoration: BoxDecoration(color: statusColor.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
+                  child: Icon(isOccupied ? Icons.door_front_door : Icons.meeting_room_outlined, color: statusColor, size: 32),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        roomName,
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: scheme.onSurface,
-                        ),
-                      ),
+                      Text(roomName, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: scheme.onSurface)),
                       const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          isOccupied ? 'OCCUPIED' : 'AVAILABLE',
-                          style: TextStyle(
-                            color: statusColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: statusColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                        child: Text(isOccupied ? 'OCCUPIED' : 'AVAILABLE', style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
@@ -871,120 +545,29 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
               ],
             ),
             const SizedBox(height: 24),
-            _buildDetailRow(Icons.category, 'Type', room['type'], scheme),
-            _buildDetailRow(Icons.layers, 'Floor', room['floor'], scheme),
-            _buildDetailRow(
-              Icons.people,
-              'Capacity',
-              '${room['capacity']} seats',
-              scheme,
-            ),
-            if (isOccupied && roomStatus != null) ...[
-              _buildDetailRow(
-                Icons.business,
-                'Branch',
-                roomStatus['branch'] ?? 'Manual',
-                scheme,
-              ),
-              _buildDetailRow(
-                Icons.group,
-                'Section',
-                roomStatus['section'] ?? 'Booking',
-                scheme,
-              ),
+            _buildDetailRow(Icons.category, 'Type', room['type'] ?? '-', scheme),
+            _buildDetailRow(Icons.layers, 'Floor', room['floor'] ?? '-', scheme),
+            _buildDetailRow(Icons.people, 'Capacity', '${room['capacity'] ?? 0} seats', scheme),
+
+            if (isOccupied && currentClass != null) ...[
+              const Divider(),
+              const SizedBox(height: 10),
+              Text("Current Occupant", style: TextStyle(fontWeight: FontWeight.bold, color: scheme.primary)),
+              const SizedBox(height: 10),
+              _buildDetailRow(Icons.book, 'Subject', currentClass['subject'] ?? '-', scheme),
+              _buildDetailRow(Icons.group, 'Class', currentClass['className'] ?? '-', scheme),
+              _buildDetailRow(Icons.person, 'Teacher', currentClass['teacher'] ?? '-', scheme),
             ],
+
             const SizedBox(height: 24),
-            // ---------------------------------------------------------
-            // EDIT HERE FOR BACKEND INTEGRATION
-            // ---------------------------------------------------------
-            if (isAvailable) ...[
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    // TODO: Call API -> POST /api/classrooms/update
-                    // body: { "roomName": roomName, "status": "occupied" }
-                    setState(() {
-                      _roomStatus[roomName] = {
-                        'occupied': true,
-                        // Set generic values since user info is removed
-                        'branch': 'Manual',
-                        'section': 'Booking',
-                      };
-                    });
-                    Navigator.pop(bCtx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✓ Room marked as Occupied'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.meeting_room),
-                  label: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text(
-                      'Occupy This Room',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ),
+            // Close Button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(bCtx),
+                child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Close', style: TextStyle(fontSize: 16))),
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(bCtx),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text('Cancel', style: TextStyle(fontSize: 16)),
-                  ),
-                ),
-              ),
-            ] else ...[
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    // TODO: Call API -> POST /api/classrooms/update
-                    // body: { "roomName": roomName, "status": "free" }
-                    setState(() {
-                      _roomStatus[roomName] = {
-                        'occupied': false,
-                        'branch': null,
-                        'section': null,
-                      };
-                    });
-                    Navigator.pop(bCtx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✓ Room marked as available'),
-                        backgroundColor: Colors.blue,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.lock_open),
-                  label: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text(
-                      'Mark as Available',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(bCtx),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Text('Close', style: TextStyle(fontSize: 16)),
-                  ),
-                ),
-              ),
-            ],
+            ),
             SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
           ],
         ),
@@ -992,32 +575,15 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
     );
   }
 
-  Widget _buildDetailRow(
-      IconData icon,
-      String label,
-      String value,
-      ColorScheme scheme,
-      ) {
+  Widget _buildDetailRow(IconData icon, String label, String value, ColorScheme scheme) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
           Icon(icon, size: 20, color: scheme.primary),
           const SizedBox(width: 12),
-          Text(
-            '$label: ',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontSize: 16, color: scheme.onSurface),
-            ),
-          ),
+          Text('$label: ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: scheme.onSurfaceVariant)),
+          Expanded(child: Text(value, style: TextStyle(fontSize: 16, color: scheme.onSurface))),
         ],
       ),
     );
