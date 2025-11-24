@@ -1,6 +1,8 @@
-// lib/student_homepage.dart
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:intl/intl.dart'; // Added for day formatting
+import 'api_service.dart';
+import 'timetable_model.dart';
 import 'find_teacher_page.dart';
 import 'find_classroom_page.dart';
 import 'student_timetable_page.dart';
@@ -9,7 +11,6 @@ import 'profile_page.dart';
 import 'emptyclassrooms_page_student.dart';
 import 'Events_page.dart';
 
-// Student Home Page Class
 class StudentHomePage extends StatefulWidget {
   final String universityName;
   final bool isDark;
@@ -48,7 +49,10 @@ class _StudentHomePageState extends State<StudentHomePage>
   late String userName;
   late String userEmail;
   late bool _isDark;
-  late AnimationController _fabController;
+
+  // Timetable State
+  Timetable? _fullTimetable;
+  bool _isLoadingTimetable = true;
 
   final List<String> eventImages = const [
     'https://picsum.photos/1200/600?random=1',
@@ -56,17 +60,10 @@ class _StudentHomePageState extends State<StudentHomePage>
     'https://picsum.photos/1200/600?random=3',
   ];
 
-  final Map<String, Map<String, List<String>>> timetableData = {
-    'EEE': {
-      'N302': [
-        'https://picsum.photos/800/400?random=11',
-        'https://picsum.photos/800/400?random=12',
-      ],
-    },
-    'CSE': {
-      'A': ['https://picsum.photos/800/400?random=21'],
-    },
-  };
+  // Define slot start times for logic (24h format)
+  final List<String> _slotStartTimes = [
+    '09:00', '09:50', '10:50', '11:40', '12:30', '13:20', '14:10', '15:10', '16:00'
+  ];
 
   @override
   void initState() {
@@ -79,17 +76,92 @@ class _StudentHomePageState extends State<StudentHomePage>
     userEmail = widget.userEmail ?? 'student@university.edu';
     _isDark = widget.isDark;
 
-    _fabController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
+    _fetchTimetable();
   }
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    _fabController.dispose();
-    super.dispose();
+  Future<void> _fetchTimetable() async {
+    try {
+      final timetable = await ApiService.getTimetable(
+        selectedDept,
+        selectedSemester,
+        selectedSection,
+      );
+      if (mounted) {
+        setState(() {
+          _fullTimetable = timetable;
+          _isLoadingTimetable = false;
+        });
+      }
+    } catch (e) {
+      print("Error loading home timetable: $e");
+      if (mounted) setState(() => _isLoadingTimetable = false);
+    }
+  }
+
+  // --- LOGIC TO FIND NEXT CLASS ---
+  Map<String, dynamic>? _getNextClassInfo() {
+    if (_fullTimetable == null) return null;
+
+    final now = DateTime.now();
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+    // Helper to convert "HH:mm" to minutes from midnight
+    int toMinutes(String time) {
+      final p = time.split(':');
+      return int.parse(p[0]) * 60 + int.parse(p[1]);
+    }
+
+    int currentMinutes = now.hour * 60 + now.minute;
+    int todayWeekdayIndex = now.weekday - 1; // Mon=0, Sun=6
+
+    // 1. Check Today (if it's a weekday)
+    if (todayWeekdayIndex >= 0 && todayWeekdayIndex < 5) {
+      String todayName = days[todayWeekdayIndex];
+      final todayData = _fullTimetable!.grid.firstWhere(
+              (d) => d.dayName == todayName,
+          orElse: () => TimetableDay(dayName: '', slots: [])
+      );
+
+      for (int i = 0; i < _slotStartTimes.length; i++) {
+        // If slot hasn't started yet
+        if (toMinutes(_slotStartTimes[i]) > currentMinutes) {
+          if (i < todayData.slots.length) {
+            final slot = todayData.slots[i];
+            if (slot.courseCode.isNotEmpty) {
+              return {
+                'slot': slot,
+                'time': _slotStartTimes[i],
+                'day': 'Today'
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Check Tomorrow (or Monday if today is Fri/Sat/Sun)
+    int nextDayIndex = (todayWeekdayIndex + 1) % 7;
+    if (nextDayIndex > 4) nextDayIndex = 0; // Wrap Sat/Sun to Mon
+
+    String nextDayName = days[nextDayIndex];
+    final nextDayData = _fullTimetable!.grid.firstWhere(
+            (d) => d.dayName == nextDayName,
+        orElse: () => TimetableDay(dayName: '', slots: [])
+    );
+
+    // Find first class of next day
+    for (int i = 0; i < nextDayData.slots.length; i++) {
+      final slot = nextDayData.slots[i];
+      if (slot.courseCode.isNotEmpty) {
+        return {
+          'slot': slot,
+          'time': _slotStartTimes[i],
+          'day': nextDayName // e.g. "Mon"
+        };
+      }
+    }
+
+    return null; // No classes found
   }
 
   void _goToPage(int index) {
@@ -103,14 +175,9 @@ class _StudentHomePageState extends State<StudentHomePage>
 
   void _updateUserName(String name) => setState(() => userName = name);
   void _updateUserEmail(String email) => setState(() => userEmail = email);
-  void _updateTheme(bool isDark) => setState(() => _isDark = isDark);
 
+  // --- HOME PAGE WIDGET ---
   Widget _homePage(BuildContext context) {
-    final imagesForPreview =
-        timetableData[selectedDept]?[selectedSection] ?? <String>[];
-    final String previewImage = imagesForPreview.isNotEmpty
-        ? imagesForPreview.first
-        : 'https://picsum.photos/800/400?random=21';
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -118,7 +185,7 @@ class _StudentHomePageState extends State<StudentHomePage>
       padding: EdgeInsets.zero,
       children: [
         const SizedBox(height: 16),
-        // Enhanced carousel with gradient overlay
+        // Carousel
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: ClipRRect(
@@ -160,155 +227,15 @@ class _StudentHomePageState extends State<StudentHomePage>
         ),
         const SizedBox(height: 20),
 
-        // NEW: Timetable Preview Frame - Scrollable in both directions
+        // --- NEXT CLASS WIDGET (REPLACED THE OLD PREVIEW) ---
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Container(
-            height: 280,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? [
-                  const Color(0xFF1A237E).withOpacity(0.3),
-                  const Color(0xFF283593).withOpacity(0.2),
-                ]
-                    : [
-                  const Color(0xFF00BCD4).withOpacity(0.1),
-                  const Color(0xFF00ACC1).withOpacity(0.05),
-                ],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: scheme.primary.withOpacity(0.15),
-                  blurRadius: 15,
-                  spreadRadius: -3,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                children: [
-                  // Scrollable Timetable Image
-                  InteractiveViewer(
-                    boundaryMargin: const EdgeInsets.all(20),
-                    minScale: 0.5,
-                    maxScale: 4.0,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: Image.network(previewImage, fit: BoxFit.contain),
-                      ),
-                    ),
-                  ),
-                  // Top Badge
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            scheme.primary.withOpacity(0.9),
-                            scheme.secondary.withOpacity(0.9),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        '$selectedDept - $selectedSection',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Bottom Info Bar
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: scheme.surface.withOpacity(0.95),
-                        borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Your Timetable',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: scheme.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Pinch to zoom • Swipe to scroll',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                          FilledButton(
-                            onPressed: () => _goToPage(1),
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            child: const Text(
-                              'Full View',
-                              style: TextStyle(fontSize: 11),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _buildNextClassCard(scheme, isDark),
         ),
 
         const SizedBox(height: 24),
 
-        // Enhanced announcements section
+        // Announcements Header
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
@@ -339,7 +266,7 @@ class _StudentHomePageState extends State<StudentHomePage>
         ),
         const SizedBox(height: 12),
 
-        // Enhanced announcement cards
+        // Announcement Cards
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Column(
@@ -364,6 +291,133 @@ class _StudentHomePageState extends State<StudentHomePage>
         ),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  // --- NEXT CLASS CARD BUILDER ---
+  Widget _buildNextClassCard(ColorScheme scheme, bool isDark) {
+    if (_isLoadingTimetable) {
+      return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+    }
+
+    final nextClass = _getNextClassInfo();
+
+    // Gradient Selection
+    final Gradient bgGradient = isDark
+        ? const LinearGradient(colors: [Color(0xFF1A237E), Color(0xFF0D47A1)])
+        : const LinearGradient(colors: [Color(0xFF4facfe), Color(0xFF00f2fe)]);
+
+    if (nextClass == null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: bgGradient,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: scheme.shadow.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: const Center(
+          child: Text("No upcoming classes found.", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+        ),
+      );
+    }
+
+    final TimetableSlot slot = nextClass['slot'];
+    final String time = nextClass['time'];
+    final String day = nextClass['day'];
+
+    // Room Logic: Prefer newRoom, fallback to permanent room
+    final String displayRoom = (slot.newRoom != null && slot.newRoom!.isNotEmpty)
+        ? slot.newRoom!
+        : (slot.room.isNotEmpty ? slot.room : "TBA");
+
+    final bool isCancelled = slot.isCancelled;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: isCancelled
+            ? LinearGradient(colors: [Colors.red.shade400, Colors.red.shade700])
+            : bgGradient,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: (isCancelled ? Colors.red : scheme.primary).withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.event_available, color: Colors.white, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      "$day @ $time",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              if (isCancelled)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                  child: const Text("CANCELLED", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
+                )
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            slot.courseName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            slot.facultyName.isNotEmpty ? slot.facultyName : "Faculty not assigned",
+            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          const Divider(color: Colors.white24),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.location_on_rounded, color: Colors.white.withOpacity(0.9), size: 18),
+              const SizedBox(width: 8),
+              Text(
+                "Room: $displayRoom",
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+              ),
+              if (slot.newRoom != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)),
+                  child: const Text("UPDATED", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                )
+              ]
+            ],
+          ),
+        ],
+      ),
     );
   }
 

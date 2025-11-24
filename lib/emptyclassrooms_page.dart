@@ -1,4 +1,29 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+/// -----------------
+/// ClassroomStatus model (from backend)
+/// -----------------
+class ClassroomStatus {
+  final String name;
+  final bool isOccupied;
+  final Map<String, dynamic>? currentClass; // info about who is inside
+
+  ClassroomStatus({
+    required this.name,
+    required this.isOccupied,
+    this.currentClass,
+  });
+
+  factory ClassroomStatus.fromJson(Map<String, dynamic> json) {
+    return ClassroomStatus(
+      name: json['name'] as String,
+      isOccupied: json['isOccupied'] ?? false,
+      currentClass: json['currentClass'] is Map ? json['currentClass'] as Map<String, dynamic> : null,
+    );
+  }
+}
 
 class EmptyClassroomsPage extends StatefulWidget {
   const EmptyClassroomsPage({super.key});
@@ -15,8 +40,21 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
   String searchQuery = '';
 
   // ---------------------------------------------------------------------------
+  // CONFIG: update baseUrl and auth header function to match your backend
+  // ---------------------------------------------------------------------------
+  static const String baseUrl = 'https://your-api.example.com/api'; // <-- update
+  Map<String, String> getAuthHeaders() {
+    // TODO: replace with your actual auth token retrieval logic
+    return {
+      'Content-Type': 'application/json',
+      //'Authorization': 'Bearer $token',
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // DUMMY DATA: This Map simulates the Database.
-  // TODO: Replace this with data fetched from your Backend API (/api/classrooms/status)
+  // TODO: Replace this with data fetched from your Backend API (/classrooms/status)
+  // Structure: 'RoomCode' : { 'occupied': bool, 'branch': String?, 'section': String? }
   // ---------------------------------------------------------------------------
   final Map<String, Map<String, dynamic>> _roomStatus = {
     'N001': {'occupied': true, 'branch': 'CSE', 'section': 'A'},
@@ -71,6 +109,9 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
       duration: const Duration(milliseconds: 300),
     );
     _animationController.forward();
+
+    // Fetch live classroom statuses on load (safe: errors are caught)
+    fetchClassrooms();
   }
 
   @override
@@ -98,6 +139,119 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
   int get availableCount {
     final totalRooms = _generateClassrooms().length;
     return totalRooms - occupiedCount;
+  }
+
+  // ---------------------------------------------------------------------------
+  // FETCH from backend and update _roomStatus map.
+  // This merges the backend response with your existing UI map.
+  // ---------------------------------------------------------------------------
+  Future<void> fetchClassrooms() async {
+    try {
+      // Calculate current Day and Slot index dynamically in Dart
+      String currentDay = _getCurrentDayName(); // e.g., "Monday"
+      int slotIndex = _getCurrentSlotIndex(); // e.g., 2 for 10:40 AM
+
+      final uri = Uri.parse(
+        "$baseUrl/classrooms/status?day=$currentDay&slotIndex=$slotIndex",
+      );
+
+      final response = await http.get(uri, headers: getAuthHeaders());
+
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body);
+        // Expecting backend: { success: true, data: [ { name, isOccupied, currentClass }, ... ] }
+        final List<dynamic>? data = body['data'] as List<dynamic>?;
+
+        if (data != null) {
+          // Convert and merge into _roomStatus
+          setState(() {
+            for (final item in data) {
+              try {
+                final cs = ClassroomStatus.fromJson(item as Map<String, dynamic>);
+                _roomStatus[cs.name] = {
+                  'occupied': cs.isOccupied,
+                  'branch': cs.currentClass?['branch'],
+                  'section': cs.currentClass?['section'],
+                  // you can store the whole currentClass if needed:
+                  'currentClass': cs.currentClass,
+                };
+              } catch (e) {
+                // If any single item fails parsing, skip it gracefully
+                // ignore and continue
+              }
+            }
+          });
+        }
+      } else {
+        // Non-200 responses — keep existing dummy data and log for debug
+        // You may want to show a SnackBar or silent fallback depending on UX
+        // print('Fetch classrooms failed: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      // Network / parsing errors — ignore and keep dummy data
+      // print('Error fetching classrooms: $e');
+    }
+  }
+
+  // Very simple day/slot helpers.
+  // Adapt the times/slot boundaries to match your backend's slot indexing.
+  String _getCurrentDayName() {
+    final now = DateTime.now();
+    switch (now.weekday) {
+      case DateTime.monday:
+        return 'Mon';
+      case DateTime.tuesday:
+        return 'Tue';
+      case DateTime.wednesday:
+        return 'Wed';
+      case DateTime.thursday:
+        return 'Thu';
+      case DateTime.friday:
+        return 'Fri';
+      case DateTime.saturday:
+        return 'Sat';
+      case DateTime.sunday:
+      default:
+        return 'Mon';
+    }
+  }
+
+  int _getCurrentSlotIndex() {
+    final now = DateTime.now();
+    final minutes = now.hour * 60 + now.minute;
+
+    // Example slot boundaries (customize to your institute's timing):
+    // slot 0: 08:00 - 08:45  (480 - 525)
+    // slot 1: 08:50 - 09:35
+    // slot 2: 09:40 - 10:25
+    // slot 3: 10:30 - 11:15
+    // slot 4: 11:20 - 12:05
+    // slot 5: 12:10 - 12:55
+    // slot 6: 13:00 - 13:45
+    // slot 7: 14:00 - 14:45
+    // slot 8: 14:50 - 15:35
+    // Adjust these ranges to match your backend's expectations.
+
+    final ranges = <List<int>>[
+      [8 * 60, 8 * 60 + 45],
+      [8 * 60 + 50, 9 * 60 + 35],
+      [9 * 60 + 40, 10 * 60 + 25],
+      [10 * 60 + 30, 11 * 60 + 15],
+      [11 * 60 + 20, 12 * 60 + 5],
+      [12 * 60 + 10, 12 * 60 + 55],
+      [13 * 60, 13 * 60 + 45],
+      [14 * 60, 14 * 60 + 45],
+      [14 * 60 + 50, 15 * 60 + 35],
+    ];
+
+    for (int i = 0; i < ranges.length; i++) {
+      final start = ranges[i][0];
+      final end = ranges[i][1];
+      if (minutes >= start && minutes <= end) return i;
+    }
+
+    // fallback slot index if outside timings
+    return 0;
   }
 
   // ---------------------------------------------------------------------------

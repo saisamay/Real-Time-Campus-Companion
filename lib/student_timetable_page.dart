@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Required for Uppercase Input
 import 'api_service.dart';
 import 'timetable_model.dart';
 
@@ -60,7 +59,6 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
       final section = await ApiService.readSection();
       final role = await ApiService.readRole();
 
-      // --- DEBUG PRINT: CHECK CONSOLE TO SEE YOUR ROLE ---
       print("--- DEBUG INFO ---");
       print("Role: '$role'");
       print("My Branch: $branch | Selected: $selectedBranch");
@@ -106,7 +104,6 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
   }
 
   // --- STRICT PERMISSION CHECK ---
-  // --- STRICT PERMISSION CHECK ---
   bool get _canEdit {
     if (_myRole == null) return false;
     final role = _myRole!.trim().toLowerCase();
@@ -116,21 +113,12 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
 
     // 2. Class Rep: Can edit ONLY their own class.
     if (role == 'classrep' || role == 'cr') {
-      // Check if viewing their own timetable
       return selectedBranch == _myBranch &&
           selectedSemester == _mySemester &&
           selectedSection == _mySection;
     }
 
-    // 3. Student: Cannot edit anything
     return false;
-  }
-
-  // Check if user is a student (read-only mode)
-  bool get _isStudent {
-    if (_myRole == null) return true; // Default to student if no role
-    final role = _myRole!.trim().toLowerCase();
-    return role == 'student' || role == 'std';
   }
 
   // --- API ACTION ---
@@ -138,6 +126,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     if (newRoom != null && newRoom.trim().isEmpty) newRoom = null;
 
     try {
+      // FIX: Use selected variables instead of widget.user
       await ApiService.updateSlot(
         semester: selectedSemester,
         branch: selectedBranch,
@@ -149,7 +138,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
       );
       if (mounted) {
         Navigator.pop(context); // Close Popup
-        _loadTimetable();       // Refresh Data
+        _loadTimetable();       // FIX: Correct method name
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Updated Successfully!'), backgroundColor: Colors.green),
         );
@@ -165,180 +154,97 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
 
   // --- THE POPUP UI ---
   void _showSlotDetails(TimetableSlot slot, String day, int index) {
-    // Controller for the room text field
-    final roomCtrl = TextEditingController(text: slot.newRoom ?? slot.room);
-    bool isCancelledState = slot.isCancelled;
+    // FIX: Removed Provider. Using local variables for permission check.
+    bool canEdit = _canEdit;
 
-    showModalBottomSheet(
+    // Logic: Can only change room if Admin hasn't set a permanent one (slot.room is empty)
+    bool canChangeRoom = canEdit && (slot.room.isEmpty);
+
+    TextEditingController roomController = TextEditingController(text: slot.newRoom ?? slot.room);
+
+    showDialog(
       context: context,
-      isScrollControlled: true, // Needed to move up with keyboard
-      backgroundColor: Colors.transparent, // For rounded corners
-      builder: (ctx) {
-        // StatefulBuilder allows us to toggle switches inside the sheet
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            // Calculate padding to avoid keyboard covering content
-            final bottomPadding = MediaQuery.of(ctx).viewInsets.bottom;
-
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      builder: (context) {
+        return AlertDialog(
+          title: Text(slot.courseName, style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // --- TEACHER PROFILE SECTION ---
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 25,
+                    backgroundColor: Colors.blue.shade100,
+                    child: const Icon(Icons.person, color: Colors.blue),
+                  ),
+                  const SizedBox(width: 15),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // FIX: Using facultyName from model instead of teacher
+                      Text(slot.facultyName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      Text("Dept: ${_myBranch ?? 'Unknown'}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  )
+                ],
               ),
-              padding: EdgeInsets.fromLTRB(24, 24, 24, bottomPadding + 24),
-              child: SingleChildScrollView( // <--- FIXES THE RENDER OVERFLOW ERROR
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // --- 1. HEADER (Image + Name) ---
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 30,
-                          backgroundColor: Colors.blue.shade50,
-                          backgroundImage: (slot.facultyImage.isNotEmpty)
-                              ? NetworkImage(slot.facultyImage)
-                              : null,
-                          child: (slot.facultyImage.isEmpty)
-                              ? Text(
-                            slot.facultyName.isNotEmpty ? slot.facultyName[0].toUpperCase() : "?",
-                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
-                          )
-                              : null,
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                slot.facultyName.isNotEmpty ? slot.facultyName : "Free Slot",
-                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                              ),
-                              if (slot.facultyDept.isNotEmpty)
-                                Text("Dept: ${slot.facultyDept}", style: const TextStyle(color: Colors.grey)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(),
+              const Divider(height: 30),
 
-                    // --- 2. DETAILS ---
-                    _detailRow(Icons.calendar_today, 'Day', day),
-                    _detailRow(Icons.access_time, 'Time', timeSlots[index]['time']!),
-                    if(slot.courseCode.isNotEmpty) ...[
-                      _detailRow(Icons.book, 'Subject', slot.courseName),
-                      _detailRow(Icons.room, 'Room', slot.room.isEmpty ? "N/A" : slot.room),
-                    ],
+              // --- SLOT DETAILS ---
+              // Use the 'timeSlots' list defined at the top of your class
+              _detailRow(Icons.access_time, timeSlots[index]['time'] ?? "Unknown Time"),
+              const SizedBox(height: 10),
+              _detailRow(Icons.location_on,
+                  (slot.newRoom != null && slot.newRoom!.isNotEmpty)
+                      ? "${slot.newRoom} (Updated)"
+                      : (slot.room.isNotEmpty ? slot.room : "No Room Assigned")
+              ),
 
-                    // --- 3. EDIT CONTROLS (Only if Teacher or CR) ---
-                    if (_canEdit && slot.courseCode.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text("Manage Class", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
-                            const SizedBox(height: 10),
+              // --- EDIT SECTION (Only for CR/Teacher) ---
+              if (canEdit) ...[
+                const SizedBox(height: 20),
+                const Text("Actions", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
 
-                            // Cancel Toggle
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text("Cancel Class", style: TextStyle(fontWeight: FontWeight.w600)),
-                              value: isCancelledState,
-                              activeColor: Colors.red,
-                              onChanged: (val) {
-                                setModalState(() => isCancelledState = val);
-                              },
-                            ),
-
-                            const SizedBox(height: 8),
-
-                            // Room Input (Disabled if cancelled)
-                            TextField(
-                              controller: roomCtrl,
-                              enabled: !isCancelledState,
-                              textCapitalization: TextCapitalization.characters, // Forces Caps on Keyboard
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(RegExp("[A-Z0-9-]")), // Forces Caps in Logic
-                              ],
-                              decoration: InputDecoration(
-                                labelText: "Change Room (Temp)",
-                                hintText: "e.g. AB-101",
-                                prefixIcon: const Icon(Icons.meeting_room),
-                                filled: true,
-                                fillColor: isCancelledState ? Colors.grey.shade200 : Colors.white,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Save Button
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () => _updateSlot(day, index, isCancelledState, roomCtrl.text),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF1E2749),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                                child: const Text("Update Slot", style: TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else if (slot.courseCode.isNotEmpty && _myRole == 'classrep') ...[
-                      // Message for CRs looking at WRONG section
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.lock, size: 20, color: Colors.orange),
-                              SizedBox(width: 8),
-                              Expanded(child: Text("You can only edit your own section.", style: TextStyle(color: Colors.orange, fontSize: 12))),
-                            ],
-                          ),
-                        ),
-                      )
-                    ],
-                  ],
+                // 1. Cancel Class Toggle
+                SwitchListTile(
+                  title: const Text("Cancel Class", style: TextStyle(fontSize: 14)),
+                  value: slot.isCancelled,
+                  onChanged: (val) {
+                    // Call API to toggle cancel
+                    _updateSlot(day, index, val, null);
+                  },
                 ),
-              ),
-            );
-          },
+
+                // 2. Change Room Input
+                if (canChangeRoom)
+                  TextField(
+                    controller: roomController,
+                    decoration: InputDecoration(
+                        labelText: "Assign Room",
+                        hintText: "Enter Room No (e.g. N205)",
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.save),
+                          onPressed: () {
+                            _updateSlot(day, index, slot.isCancelled, roomController.text);
+                          },
+                        )
+                    ),
+                  )
+              ]
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close"))
+          ],
         );
       },
     );
   }
 
-  Widget _detailRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: Colors.grey.shade600),
-          const SizedBox(width: 12),
-          Text("$label: ", style: const TextStyle(fontWeight: FontWeight.w600)),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
+  Widget _detailRow(IconData icon, String text) {
+    return Row(children: [Icon(icon, size: 18, color: Colors.grey), const SizedBox(width: 10), Text(text)]);
   }
 
   // --- MAIN BUILD ---
@@ -361,7 +267,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     );
   }
 
-  // --- CONTROLS & GRID (Same as before) ---
+  // --- CONTROLS & GRID ---
   Widget _buildControls() {
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -426,7 +332,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
 
   Widget _buildTimetableGrid() {
     if (_currentTimetable == null) return const SizedBox.shrink();
-    Color _hexToColor(String hex) {
+    Color hexToColor(String hex) {
       try { return Color(int.parse(hex.replaceAll('#', ''), radix: 16) | 0xFF000000); } catch (_) { return Colors.white; }
     }
 
@@ -474,7 +380,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
                   ...List.generate(9, (index) {
                     final slot = daySlots.length > index ? daySlots[index] : TimetableSlot();
                     final hasClass = slot.courseCode.isNotEmpty;
-                    Color bg = hasClass ? _hexToColor(slot.color).withOpacity(0.2) : Colors.transparent;
+                    Color bg = hasClass ? hexToColor(slot.color).withOpacity(0.2) : Colors.transparent;
                     if (slot.isCancelled) bg = Colors.red.shade50;
 
                     return GestureDetector(
@@ -487,7 +393,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
                         decoration: BoxDecoration(
                           color: bg,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: hasClass ? _hexToColor(slot.color).withOpacity(0.5) : Colors.grey.shade200),
+                          border: Border.all(color: hasClass ? hexToColor(slot.color).withOpacity(0.5) : Colors.grey.shade200),
                         ),
                         child: hasClass ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
