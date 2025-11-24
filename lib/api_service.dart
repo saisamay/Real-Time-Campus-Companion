@@ -265,7 +265,6 @@ class ApiService {
   // SECTION 6: USER MANAGEMENT (Create / Edit / Delete)
   // ===========================================================================
 
-  // 1. Create User
   static Future<Map<String, dynamic>> createUserWithProfile({
     required String name,
     required String email,
@@ -278,7 +277,7 @@ class ApiService {
     required String section,
     required String branch,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/user'); // Ensure backend route matches
+    final uri = Uri.parse('$baseUrl/api/user');
 
     var request = http.MultipartRequest('POST', uri);
 
@@ -318,7 +317,6 @@ class ApiService {
     }
   }
 
-  // 2. Search Users (For Edit Page)
   static Future<List<dynamic>> searchUsers(String query) async {
     if (query.isEmpty) return [];
     final response = await http.get(
@@ -333,7 +331,6 @@ class ApiService {
     }
   }
 
-  // 3. Update User By ID (Replaces email-based update)
   static Future<void> updateUserById({
     required String id,
     String? name,
@@ -372,11 +369,8 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception('Update failed: ${response.body}');
     }
-    // Note: We DO NOT call saveUserProfile here because an Admin is editing another user.
-    // We don't want to overwrite the Admin's local session with the student's data.
   }
 
-  // 4. Delete User
   static Future<void> deleteUser(String id) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/api/user/$id'),
@@ -385,6 +379,81 @@ class ApiService {
 
     if (response.statusCode != 200) {
       throw Exception('Delete failed: ${response.body}');
+    }
+  }
+
+  // ===========================================================================
+  // SECTION 7: EVENTS (NEWLY ADDED)
+  // ===========================================================================
+
+  static Future<List<dynamic>> getAllEvents() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/events'));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['events']; // Backend returns { events: [...] }
+    } else {
+      throw Exception('Failed to load events');
+    }
+  }
+
+  static Future<void> createEvent({
+    required String title,
+    required String description,
+    required DateTime date,
+    required String imageUrl,
+    required List<String> regulations,
+    required String registrationLink,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/events'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'title': title,
+        'description': description,
+        'date': date.toIso8601String(),
+        'imageUrl': imageUrl,
+        'regulations': regulations,
+        'registrationLink': registrationLink,
+      }),
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Failed to create event: ${response.body}');
+    }
+  }
+
+  static Future<void> updateEvent({
+    required String eventId,
+    required String title,
+    required String description,
+    required DateTime date,
+    required String imageUrl,
+    required List<String> regulations,
+    required String registrationLink,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/events/$eventId'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'title': title,
+        'description': description,
+        'date': date.toIso8601String(),
+        'imageUrl': imageUrl,
+        'regulations': regulations,
+        'registrationLink': registrationLink,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update event: ${response.body}');
+    }
+  }
+
+  static Future<void> deleteEvent(String id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/events/$id'),
+      headers: await _headers(auth: true),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete event');
     }
   }
 }
