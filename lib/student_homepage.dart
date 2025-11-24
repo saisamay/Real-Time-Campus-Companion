@@ -670,7 +670,7 @@ class _StudentHomePageState extends State<StudentHomePage>
           _homePage(context),
           const StudentTimetablePage(embedded: true),
           const EventsPage(),
-          const EmptyClassroomsPagestudent(),
+          const EmptyClassroomsPage(),
           ProfilePage(
             userName: userName,
             userEmail: userEmail,

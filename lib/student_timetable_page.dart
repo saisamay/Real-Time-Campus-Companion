@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Required for Uppercase Input
 import 'api_service.dart';
 import 'timetable_model.dart';
 
@@ -17,26 +18,22 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
   // Currently Loaded Timetable
   Timetable? _currentTimetable;
 
-  // Logged-in User's Profile (For Permission Checks)
+  // Logged-in User's Profile
   String? _myBranch;
   String? _mySemester;
   String? _mySection;
   String? _myRole;
 
-  // UI Selectors (What we are viewing currently)
+  // UI Selectors
   String selectedSemester = 'S5';
   String selectedBranch = 'CSE';
   String selectedSection = 'A';
 
-  // Dropdown Options
   final List<String> semesters = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'];
   final List<String> branches = ['CSE', 'EEE', 'MECH', 'CIVIL', 'AIE', 'ECE'];
   final List<String> sections = ['A', 'B', 'C', 'D', 'E'];
-
-  // Days to display
   final List<String> _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
-  // Time Slot Definitions (Matches your reference UI)
   final List<Map<String, String>> timeSlots = [
     {'no': '1', 'time': '09:00 - 09:50'},
     {'no': '2', 'time': '09:50 - 10:40'},
@@ -58,25 +55,27 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
   Future<void> _initialize() async {
     setState(() => _isLoading = true);
     try {
-      // 1. Read User Profile & Role from Storage
       final branch = await ApiService.readBranch();
       final semester = await ApiService.readSemester();
       final section = await ApiService.readSection();
       final role = await ApiService.readRole();
+
+      // --- DEBUG PRINT: CHECK CONSOLE TO SEE YOUR ROLE ---
+      print("--- DEBUG INFO ---");
+      print("Role: '$role'");
+      print("My Branch: $branch | Selected: $selectedBranch");
+      print("------------------");
 
       _myBranch = branch;
       _mySemester = semester;
       _mySection = section;
       _myRole = role;
 
-      // 2. Default the selectors to the user's own class
       if (branch != null) selectedBranch = branch;
       if (semester != null) selectedSemester = semester;
       if (section != null) selectedSection = section;
 
-      // 3. Load that timetable initially
       await _loadTimetable();
-
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -90,7 +89,6 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
       _error = null;
     });
     try {
-      // Fetch specific timetable based on dropdowns
       final timetable = await ApiService.getTimetable(
           selectedBranch,
           selectedSemester,
@@ -107,20 +105,38 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     }
   }
 
-  // --- PERMISSION CHECK ---
+  // --- STRICT PERMISSION CHECK ---
+  // --- STRICT PERMISSION CHECK ---
   bool get _canEdit {
-    // 1. Must be Class Rep
-    if (_myRole != 'classrep') return false;
+    if (_myRole == null) return false;
+    final role = _myRole!.trim().toLowerCase();
 
-    // 2. Must be viewing THEIR OWN section
-    // We compare strictly to avoid CRs editing other classes
-    return selectedBranch == _myBranch &&
-        selectedSemester == _mySemester &&
-        selectedSection == _mySection;
+    // 1. Teacher/Faculty: Can edit EVERYTHING.
+    if (role == 'teacher' || role == 'faculty') return true;
+
+    // 2. Class Rep: Can edit ONLY their own class.
+    if (role == 'classrep' || role == 'cr') {
+      // Check if viewing their own timetable
+      return selectedBranch == _myBranch &&
+          selectedSemester == _mySemester &&
+          selectedSection == _mySection;
+    }
+
+    // 3. Student: Cannot edit anything
+    return false;
   }
 
-  // --- ACTIONS ---
+  // Check if user is a student (read-only mode)
+  bool get _isStudent {
+    if (_myRole == null) return true; // Default to student if no role
+    final role = _myRole!.trim().toLowerCase();
+    return role == 'student' || role == 'std';
+  }
+
+  // --- API ACTION ---
   Future<void> _updateSlot(String day, int index, bool isCancelled, String? newRoom) async {
+    if (newRoom != null && newRoom.trim().isEmpty) newRoom = null;
+
     try {
       await ApiService.updateSlot(
         semester: selectedSemester,
@@ -131,205 +147,228 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
         isCancelled: isCancelled,
         newRoom: newRoom,
       );
-      Navigator.pop(context); // Close bottom sheet
-      _loadTimetable(); // Refresh grid
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Updated Successfully!'), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        Navigator.pop(context); // Close Popup
+        _loadTimetable();       // Refresh Data
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Updated Successfully!'), backgroundColor: Colors.green),
+        );
+      }
     } catch (e) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
-  // --- UI HELPERS ---
-  Color _hexToColor(String hex) {
-    try {
-      hex = hex.replaceAll('#', '');
-      if (hex.length == 6) hex = 'FF$hex';
-      return Color(int.parse(hex, radix: 16));
-    } catch (_) {
-      return Colors.white;
-    }
-  }
-
-  // --- POPUP DETAILS ---
+  // --- THE POPUP UI ---
   void _showSlotDetails(TimetableSlot slot, String day, int index) {
-    // For the room change text field
+    // Controller for the room text field
     final roomCtrl = TextEditingController(text: slot.newRoom ?? slot.room);
+    bool isCancelledState = slot.isCancelled;
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // --- NEW HEADER WITH PROFILE ---
-            Row(
-              children: [
-                // Profile Picture
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.blue.shade100,
-                  backgroundImage: (slot.facultyImage.isNotEmpty)
-                      ? NetworkImage(slot.facultyImage)
-                      : null,
-                  child: (slot.facultyImage.isEmpty && slot.facultyName.isNotEmpty)
-                      ? Text(slot.facultyName[0], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20))
-                      : null,
-                ),
-                const SizedBox(width: 16),
+      isScrollControlled: true, // Needed to move up with keyboard
+      backgroundColor: Colors.transparent, // For rounded corners
+      builder: (ctx) {
+        // StatefulBuilder allows us to toggle switches inside the sheet
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            // Calculate padding to avoid keyboard covering content
+            final bottomPadding = MediaQuery.of(ctx).viewInsets.bottom;
 
-                // Name and Course Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        slot.facultyName.isNotEmpty ? slot.facultyName : "Free Slot",
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      if (slot.facultyDept.isNotEmpty)
-                        Text(
-                            "Dept of ${slot.facultyDept}",
-                            style: const TextStyle(color: Colors.grey, fontSize: 12)
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Divider(),
-
-            // Info Rows
-            _detailRow(Icons.calendar_today, 'Day', day),
-            _detailRow(Icons.access_time, 'Time', timeSlots.length > index ? timeSlots[index]['time']! : 'Slot ${index+1}'),
-            if (slot.courseCode.isNotEmpty) ...[
-              _detailRow(Icons.person, 'Faculty', slot.facultyName),
-              _detailRow(Icons.room, 'Room', slot.newRoom != null
-                  ? '${slot.newRoom} (Changed)'
-                  : slot.room.isEmpty ? 'N/A' : slot.room),
-            ],
-
-            if (slot.isCancelled)
-              const Padding(
-                padding: EdgeInsets.only(top: 8.0),
-                child: Chip(label: Text('Class Cancelled'), backgroundColor: Colors.red, labelStyle: TextStyle(color: Colors.white)),
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-
-            // --- EDIT CONTROLS (Only if _canEdit is true) ---
-            if (_canEdit && slot.courseCode.isNotEmpty) ...[
-              const Divider(height: 30),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade100)
-                ),
+              padding: EdgeInsets.fromLTRB(24, 24, 24, bottomPadding + 24),
+              child: SingleChildScrollView( // <--- FIXES THE RENDER OVERFLOW ERROR
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Class Rep Controls', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-
-                    // Toggle Cancel
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Cancel Class'),
-                      value: slot.isCancelled,
-                      activeColor: Colors.red,
-                      onChanged: (val) => _updateSlot(day, index, val, null),
-                    ),
-
-                    // Change Room
+                    // --- 1. HEADER (Image + Name) ---
                     Row(
                       children: [
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: Colors.blue.shade50,
+                          backgroundImage: (slot.facultyImage.isNotEmpty)
+                              ? NetworkImage(slot.facultyImage)
+                              : null,
+                          child: (slot.facultyImage.isEmpty)
+                              ? Text(
+                            slot.facultyName.isNotEmpty ? slot.facultyName[0].toUpperCase() : "?",
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                          )
+                              : null,
+                        ),
+                        const SizedBox(width: 16),
                         Expanded(
-                          child: TextField(
-                            controller: roomCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'New Room',
-                              isDense: true,
-                              border: OutlineInputBorder(),
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                slot.facultyName.isNotEmpty ? slot.facultyName : "Free Slot",
+                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              ),
+                              if (slot.facultyDept.isNotEmpty)
+                                Text("Dept: ${slot.facultyDept}", style: const TextStyle(color: Colors.grey)),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () => _updateSlot(day, index, slot.isCancelled, roomCtrl.text),
-                          child: const Text('Update'),
-                        )
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+
+                    // --- 2. DETAILS ---
+                    _detailRow(Icons.calendar_today, 'Day', day),
+                    _detailRow(Icons.access_time, 'Time', timeSlots[index]['time']!),
+                    if(slot.courseCode.isNotEmpty) ...[
+                      _detailRow(Icons.book, 'Subject', slot.courseName),
+                      _detailRow(Icons.room, 'Room', slot.room.isEmpty ? "N/A" : slot.room),
+                    ],
+
+                    // --- 3. EDIT CONTROLS (Only if Teacher or CR) ---
+                    if (_canEdit && slot.courseCode.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text("Manage Class", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+                            const SizedBox(height: 10),
+
+                            // Cancel Toggle
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text("Cancel Class", style: TextStyle(fontWeight: FontWeight.w600)),
+                              value: isCancelledState,
+                              activeColor: Colors.red,
+                              onChanged: (val) {
+                                setModalState(() => isCancelledState = val);
+                              },
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            // Room Input (Disabled if cancelled)
+                            TextField(
+                              controller: roomCtrl,
+                              enabled: !isCancelledState,
+                              textCapitalization: TextCapitalization.characters, // Forces Caps on Keyboard
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp("[A-Z0-9-]")), // Forces Caps in Logic
+                              ],
+                              decoration: InputDecoration(
+                                labelText: "Change Room (Temp)",
+                                hintText: "e.g. AB-101",
+                                prefixIcon: const Icon(Icons.meeting_room),
+                                filled: true,
+                                fillColor: isCancelledState ? Colors.grey.shade200 : Colors.white,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Save Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => _updateSlot(day, index, isCancelledState, roomCtrl.text),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF1E2749),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Text("Update Slot", style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (slot.courseCode.isNotEmpty && _myRole == 'classrep') ...[
+                      // Message for CRs looking at WRONG section
+                      Padding(
+                        padding: const EdgeInsets.only(top: 20),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.lock, size: 20, color: Colors.orange),
+                              SizedBox(width: 8),
+                              Expanded(child: Text("You can only edit your own section.", style: TextStyle(color: Colors.orange, fontSize: 12))),
+                            ],
+                          ),
+                        ),
+                      )
+                    ],
                   ],
                 ),
               ),
-            ] else if (slot.courseCode.isNotEmpty && _myRole == 'classrep') ...[
-              // CR viewing someone else's timetable
-              const Padding(
-                padding: EdgeInsets.only(top: 12),
-                child: Text(
-                  'Note: You can only edit the timetable for your own section.',
-                  style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-                ),
-              ),
-            ]
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
   Widget _detailRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: Colors.grey[700]),
+          Icon(icon, size: 20, color: Colors.grey.shade600),
           const SizedBox(width: 12),
-          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text("$label: ", style: const TextStyle(fontWeight: FontWeight.w600)),
           Expanded(child: Text(value)),
         ],
       ),
     );
   }
 
-  // --- BUILD METHOD ---
+  // --- MAIN BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Only show AppBar if not embedded in another page
       appBar: widget.embedded ? null : AppBar(title: const Text('Timetable'), centerTitle: true),
       body: Column(
         children: [
-          // 1. Search Controls
           _buildControls(),
-
-          // 2. Content
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
                 ? Center(child: Text(_error!, style: const TextStyle(color: Colors.grey)))
-                : _buildTimetableGrid(), // The scrollable table
+                : _buildTimetableGrid(),
           ),
         ],
       ),
     );
   }
 
+  // --- CONTROLS & GRID (Same as before) ---
   Widget _buildControls() {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
+        color: Colors.grey.shade100,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -348,6 +387,11 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: _loadTimetable,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E2749),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14)
+                  ),
                   icon: const Icon(Icons.search),
                   label: const Text('View Timetable'),
                 ),
@@ -360,28 +404,32 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
   }
 
   Widget _buildDropdown(String label, List<String> items, String current, ValueChanged<String?> onChanged) {
-    return InputDecorator(
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+    return Container(
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300)
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: current,
           isExpanded: true,
-          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13)))).toList(),
+          icon: const Icon(Icons.arrow_drop_down, color: Colors.black54),
+          style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
+          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           onChanged: onChanged,
         ),
       ),
     );
   }
 
-  // --- THE GRID UI (Matches your reference code) ---
   Widget _buildTimetableGrid() {
     if (_currentTimetable == null) return const SizedBox.shrink();
+    Color _hexToColor(String hex) {
+      try { return Color(int.parse(hex.replaceAll('#', ''), radix: 16) | 0xFF000000); } catch (_) { return Colors.white; }
+    }
 
-    // Map DayName -> List of Slots for easy lookup
     final Map<String, List<TimetableSlot>> gridMap = {};
     for (var d in _currentTimetable!.grid) {
       gridMap[d.dayName] = d.slots;
@@ -391,118 +439,78 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
         scrollDirection: Axis.vertical,
-        padding: const EdgeInsets.only(bottom: 20),
+        padding: const EdgeInsets.only(bottom: 20, left: 16, right: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Header Row (Time Slots)
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(width: 120), // Empty corner for "Days" column
+                const SizedBox(width: 100),
                 ...timeSlots.map((s) => Container(
-                  width: 160,
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(border: Border.all(color: Colors.black12), color: Colors.white),
+                  width: 150,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: Column(
                     children: [
-                      Text(s['time']!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
-                      const SizedBox(height: 4),
-                      Text('(${s['no']})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      Text(s['time']!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text('(${s['no']})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 )),
               ],
             ),
-
-            // 2. Rows for Each Day
             ..._days.map((day) {
-              // Get slots or empty list
               final List<TimetableSlot> daySlots = gridMap[day] ?? List.generate(9, (_) => TimetableSlot());
-
               return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Day Label Column
                   Container(
-                    width: 120,
-                    height: 100,
-                    margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                    width: 100,
+                    height: 110,
+                    margin: const EdgeInsets.only(bottom: 8, right: 8),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
                     alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        border: Border.all(color: Colors.black12),
-                        borderRadius: BorderRadius.circular(8)
-                    ),
-                    child: Text(day, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(day, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
-
-                  // Slot Cells
                   ...List.generate(9, (index) {
                     final slot = daySlots.length > index ? daySlots[index] : TimetableSlot();
                     final hasClass = slot.courseCode.isNotEmpty;
-
-                    // Color Logic
-                    Color bg = hasClass ? _hexToColor(slot.color).withOpacity(0.3) : Colors.white;
-                    if (slot.isCancelled) bg = Colors.red.shade100;
+                    Color bg = hasClass ? _hexToColor(slot.color).withOpacity(0.2) : Colors.transparent;
+                    if (slot.isCancelled) bg = Colors.red.shade50;
 
                     return GestureDetector(
                       onTap: () => _showSlotDetails(slot, day, index),
                       child: Container(
-                        width: 160,
-                        height: 100,
-                        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                        padding: const EdgeInsets.all(8),
+                        width: 150,
+                        height: 110,
+                        margin: const EdgeInsets.only(bottom: 8, right: 8),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: bg,
-                          border: Border.all(color: Colors.black12),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: hasClass ? _hexToColor(slot.color).withOpacity(0.5) : Colors.grey.shade200),
                         ),
-                        child: Column(
+                        child: hasClass ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (hasClass) ...[
-                              // Title
-                              Text(
-                                slot.courseName,
-                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              // Subtitle (Faculty)
-                              Expanded(
-                                child: Text(
-                                  slot.facultyName,
-                                  style: const TextStyle(fontSize: 11, color: Colors.black87),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              // Bottom: Room & Slot No
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  if (slot.isCancelled)
-                                    const Text('CANCELLED', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold))
-                                  else if (slot.newRoom != null)
-                                    Text(slot.newRoom!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 11))
-                                  else
-                                    Text(slot.room, style: TextStyle(fontSize: 11, color: Colors.blueGrey[700], fontWeight: FontWeight.bold)),
-
-                                  Text('(${index+1})', style: const TextStyle(fontSize: 10, color: Colors.black45)),
-                                ],
-                              ),
-                            ] else
-                              const Center(child: Text('-', style: TextStyle(color: Colors.grey))),
+                            Text(slot.courseName, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey.shade900)),
+                            const Spacer(),
+                            Text(slot.facultyName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade700)),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(slot.isCancelled ? 'CANCELLED' : (slot.newRoom ?? slot.room), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: slot.isCancelled ? Colors.red : Colors.black87)),
+                                Text('(${index+1})', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                              ],
+                            )
                           ],
-                        ),
+                        ) : const Center(child: Text("-", style: TextStyle(color: Colors.grey))),
                       ),
                     );
                   })
                 ],
               );
-            }),
+            })
           ],
         ),
       ),
