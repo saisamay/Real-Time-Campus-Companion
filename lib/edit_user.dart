@@ -15,33 +15,31 @@ class _EditUserPageState extends State<EditUserPage> {
   final _formKey = GlobalKey<FormState>();
   final _picker = ImagePicker();
 
-  // We use this key to force the Autocomplete to rebuild/clear when needed
   Key _searchKey = UniqueKey();
 
-  // Search State
-  String? _selectedUserId; // The ID of the user we are editing
-  String? _currentProfileUrl; // URL from backend
+  String? _selectedUserId;
+  String? _currentProfileUrl;
 
-  // Form Fields
-  String name = '';
-  String email = '';
-  String password = '';
-  String rollNo = '';
-  String branch = '';
-  String semester = '';
-  String section = '';
+  // CONTROLLERS (The Fix)
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _rollNoCtrl = TextEditingController();
+  final _branchCtrl = TextEditingController();
+  final _semesterCtrl = TextEditingController(); // Can be used if dropdown fails
+  final _sectionCtrl = TextEditingController();
+
+  // State Variables
   String role = 'student';
   DateTime? dob;
-
   File? _newProfileFile;
   bool _isSubmitting = false;
 
-  // Dropdown Options
+  // Options
   final List<String> _semesterOptions = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'];
   String? _selectedSemester;
   final List<String> _roleOptions = ['student', 'classrep', 'teacher', 'admin', 'staff'];
 
-  // --- Logic for Field Visibility ---
   bool get isStudent => role == 'student' || role == 'classrep';
   bool get isTeacher => role == 'teacher';
   bool get isAdmin => role == 'admin';
@@ -51,7 +49,18 @@ class _EditUserPageState extends State<EditUserPage> {
   bool get enableSemester => isStudent || isAdmin;
   bool get enableSection => isStudent || isAdmin;
 
-  // --- Image Picker ---
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    _rollNoCtrl.dispose();
+    _branchCtrl.dispose();
+    _semesterCtrl.dispose();
+    _sectionCtrl.dispose();
+    super.dispose();
+  }
+
   void _showImageSourceDialog() {
     showModalBottomSheet(
       context: context,
@@ -98,83 +107,79 @@ class _EditUserPageState extends State<EditUserPage> {
     if (picked != null) setState(() => dob = picked);
   }
 
-  // --- Populate Form ---
   void _populateForm(Map<String, dynamic> user) {
     setState(() {
       _selectedUserId = user['_id'];
-      name = user['name'] ?? '';
-      email = user['email'] ?? '';
-      role = user['role'] ?? 'student';
-      rollNo = user['rollNo'] ?? '';
-      branch = user['branch'] ?? '';
-      semester = user['semester'] ?? '';
-      section = user['section'] ?? '';
-      password = ''; // Clear password field
 
-      // Parse DOB
+      // Update Controllers directly
+      _nameCtrl.text = user['name'] ?? '';
+      _emailCtrl.text = user['email'] ?? '';
+      _rollNoCtrl.text = user['rollNo'] ?? '';
+      _branchCtrl.text = user['branch'] ?? '';
+      _sectionCtrl.text = user['section'] ?? '';
+      _passwordCtrl.clear(); // Password usually reset only on demand
+
+      role = user['role'] ?? 'student';
+      String sem = user['semester'] ?? '';
+
       if (user['dob'] != null) {
         try { dob = DateTime.parse(user['dob']); } catch (_) { dob = null; }
       } else { dob = null; }
 
-      // Handle Semester Dropdown matching
-      if (_semesterOptions.contains(semester)) {
-        _selectedSemester = semester;
+      if (_semesterOptions.contains(sem)) {
+        _selectedSemester = sem;
       } else {
         _selectedSemester = null;
       }
 
-      // Profile Image
       if (user['profile'] != null && user['profile']['url'] != null) {
         _currentProfileUrl = user['profile']['url'];
       } else {
         _currentProfileUrl = null;
       }
-      _newProfileFile = null; // Reset any locally picked file
+      _newProfileFile = null;
     });
   }
 
-  // --- Helper to Clear Selection ---
   void _clearSelection() {
     setState(() {
       _selectedUserId = null;
-      _searchKey = UniqueKey(); // This forces the Autocomplete to reset completely
-      // Reset form variables just in case
-      name = '';
-      email = '';
-      rollNo = '';
-      branch = '';
-      section = '';
+      _searchKey = UniqueKey();
+      _nameCtrl.clear();
+      _emailCtrl.clear();
+      _rollNoCtrl.clear();
+      _branchCtrl.clear();
+      _sectionCtrl.clear();
+      _passwordCtrl.clear();
+      _selectedSemester = null;
       _newProfileFile = null;
       _currentProfileUrl = null;
     });
   }
 
-  // --- API Actions ---
-
   Future<void> _updateUser() async {
     if (_selectedUserId == null) return;
     if (!_formKey.currentState!.validate()) return;
-    _formKey.currentState!.save();
+    // No need to save(), we use controllers
 
     setState(() => _isSubmitting = true);
     try {
-      // Clear disabled fields
-      if (!enableRollNo) rollNo = '';
-      if (!enableBranch) branch = '';
-      if (!enableSemester) semester = '';
-      if (!enableSection) section = '';
+      String sendRoll = enableRollNo ? _rollNoCtrl.text.trim() : '';
+      String sendBranch = enableBranch ? _branchCtrl.text.trim() : '';
+      String sendSem = enableSemester ? (_selectedSemester ?? '') : '';
+      String sendSec = enableSection ? _sectionCtrl.text.trim() : '';
 
       await ApiService.updateUserById(
         id: _selectedUserId!,
-        name: name,
-        email: email,
-        password: password,
+        name: _nameCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
         dob: dob,
         role: role,
-        rollNo: rollNo,
-        semester: semester,
-        section: section,
-        branch: branch,
+        rollNo: sendRoll,
+        semester: sendSem,
+        section: sendSec,
+        branch: sendBranch,
         profilePath: _newProfileFile?.path,
       );
 
@@ -195,7 +200,7 @@ class _EditUserPageState extends State<EditUserPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete User'),
-        content: Text('Are you sure you want to delete $email?'),
+        content: Text('Are you sure you want to delete ${_emailCtrl.text}?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
@@ -209,7 +214,7 @@ class _EditUserPageState extends State<EditUserPage> {
         await ApiService.deleteUser(_selectedUserId!);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User Deleted'), backgroundColor: Colors.green));
-          _clearSelection(); // Reset to search mode
+          _clearSelection();
         }
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete Failed: $e'), backgroundColor: Colors.red));
@@ -230,14 +235,12 @@ class _EditUserPageState extends State<EditUserPage> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // --- SEARCH BAR (Autocomplete) ---
+            // Search Bar
             Autocomplete<Map<String, dynamic>>(
-              key: _searchKey, // IMPORTANT: Forces rebuild on clear
+              key: _searchKey,
               displayStringForOption: (option) => option['email'] ?? '',
               optionsBuilder: (TextEditingValue textEditingValue) async {
-                if (textEditingValue.text.isEmpty) {
-                  return const Iterable<Map<String, dynamic>>.empty();
-                }
+                if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
                 try {
                   final results = await ApiService.searchUsers(textEditingValue.text);
                   return results.cast<Map<String, dynamic>>();
@@ -256,13 +259,12 @@ class _EditUserPageState extends State<EditUserPage> {
                     labelText: 'Search User by Email',
                     hintText: 'Start typing email...',
                     prefixIcon: const Icon(Icons.search),
-                    // NEW: Clear Button
                     suffixIcon: textEditingController.text.isNotEmpty || _selectedUserId != null
                         ? IconButton(
                       icon: const Icon(Icons.clear),
                       onPressed: () {
                         textEditingController.clear();
-                        _clearSelection(); // Resets everything
+                        _clearSelection();
                       },
                     )
                         : null,
@@ -301,7 +303,6 @@ class _EditUserPageState extends State<EditUserPage> {
             const Divider(),
             const SizedBox(height: 10),
 
-            // --- EDIT FORM (Only visible if user selected) ---
             if (_selectedUserId == null)
               const Center(
                   child: Padding(
@@ -320,7 +321,7 @@ class _EditUserPageState extends State<EditUserPage> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    // 1. Image Editor
+                    // Image
                     Center(
                       child: Stack(
                         children: [
@@ -364,24 +365,22 @@ class _EditUserPageState extends State<EditUserPage> {
 
                     // Personal Info
                     TextFormField(
-                      initialValue: name,
+                      controller: _nameCtrl,
                       decoration: const InputDecoration(labelText: 'Full Name', prefixIcon: Icon(Icons.person_outline), border: OutlineInputBorder()),
-                      onSaved: (v) => name = v?.trim() ?? '',
                       validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
                     ),
                     const SizedBox(height: 15),
 
                     TextFormField(
-                      initialValue: email,
+                      controller: _emailCtrl,
                       decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined), border: OutlineInputBorder()),
-                      onSaved: (v) => email = v?.trim().toLowerCase() ?? '',
                       validator: (v) => (v == null || !v.contains('@')) ? 'Invalid email' : null,
                     ),
                     const SizedBox(height: 15),
 
                     TextFormField(
+                      controller: _passwordCtrl,
                       decoration: const InputDecoration(labelText: 'New Password (Optional)', prefixIcon: Icon(Icons.lock_outline), border: OutlineInputBorder(), hintText: 'Leave blank to keep current'),
-                      onSaved: (v) => password = v ?? '',
                     ),
                     const SizedBox(height: 15),
 
@@ -389,15 +388,13 @@ class _EditUserPageState extends State<EditUserPage> {
                     Row(
                       children: [
                         Expanded(child: AbsorbPointer(absorbing: !enableRollNo, child: Opacity(opacity: enableRollNo ? 1 : 0.5, child: TextFormField(
-                          initialValue: rollNo,
+                          controller: _rollNoCtrl,
                           decoration: InputDecoration(labelText: 'Roll No', border: const OutlineInputBorder(), filled: !enableRollNo, fillColor: !enableRollNo ? disabledColor : null),
-                          onSaved: (v) => rollNo = v?.trim() ?? '',
                         )))),
                         const SizedBox(width: 10),
                         Expanded(child: AbsorbPointer(absorbing: !enableSection, child: Opacity(opacity: enableSection ? 1 : 0.5, child: TextFormField(
-                          initialValue: section,
+                          controller: _sectionCtrl,
                           decoration: InputDecoration(labelText: 'Section', border: const OutlineInputBorder(), filled: !enableSection, fillColor: !enableSection ? disabledColor : null),
-                          onSaved: (v) => section = v?.trim() ?? '',
                         )))),
                       ],
                     ),
@@ -410,14 +407,12 @@ class _EditUserPageState extends State<EditUserPage> {
                           decoration: InputDecoration(labelText: 'Semester', border: const OutlineInputBorder(), filled: !enableSemester, fillColor: !enableSemester ? disabledColor : null),
                           value: _selectedSemester,
                           items: _semesterOptions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                          onChanged: enableSemester ? (v) => setState(() { _selectedSemester = v; semester = v ?? ''; }) : null,
-                          onSaved: (v) => semester = v ?? '',
+                          onChanged: enableSemester ? (v) => setState(() { _selectedSemester = v; }) : null,
                         )))),
                         const SizedBox(width: 10),
                         Expanded(child: AbsorbPointer(absorbing: !enableBranch, child: Opacity(opacity: enableBranch ? 1 : 0.5, child: TextFormField(
-                          initialValue: branch,
+                          controller: _branchCtrl,
                           decoration: InputDecoration(labelText: 'Branch', border: const OutlineInputBorder(), filled: !enableBranch, fillColor: !enableBranch ? disabledColor : null),
-                          onSaved: (v) => branch = v?.trim() ?? '',
                         )))),
                       ],
                     ),
@@ -434,7 +429,6 @@ class _EditUserPageState extends State<EditUserPage> {
 
                     const SizedBox(height: 30),
 
-                    // Buttons
                     if (_isSubmitting)
                       const CircularProgressIndicator()
                     else
