@@ -66,14 +66,18 @@ class TimetableSlot {
   String courseCode;
   String courseName;
   String facultyName;
-  String facultyImage; // <--- Added
-  String facultyDept;  // <--- Added
+  String facultyImage;
+  String facultyDept;
   String color;
   String type;
   String room;
   bool isCancelled;
   String? newRoom;
   String displayContext;
+
+  // NEW FIELDS
+  String startTime;
+  String endTime;
 
   TimetableSlot({
     this.courseCode = '',
@@ -87,6 +91,8 @@ class TimetableSlot {
     this.isCancelled = false,
     this.newRoom,
     this.displayContext = '',
+    this.startTime = '', // Default empty
+    this.endTime = '',   // Default empty
   });
 
   factory TimetableSlot.fromJson(Map<String, dynamic> json) {
@@ -102,6 +108,8 @@ class TimetableSlot {
       isCancelled: json['isCancelled'] ?? false,
       newRoom: json['newRoom'],
       displayContext: json['displayContext'] ?? '',
+      startTime: json['startTime'] ?? '',
+      endTime: json['endTime'] ?? '',
     );
   }
 
@@ -117,6 +125,8 @@ class TimetableSlot {
       'room': room,
       'isCancelled': isCancelled,
       'newRoom': newRoom,
+      'startTime': startTime,
+      'endTime': endTime,
     };
   }
 }

@@ -1,139 +1,24 @@
 import 'package:flutter/material.dart';
+import 'api_service.dart'; // Ensure this is imported
 
-class EmptyClassroomsPage extends StatefulWidget {
-  const EmptyClassroomsPage({super.key});
+class EmptyClassroomsPagestudent extends StatefulWidget {
+  const EmptyClassroomsPagestudent({super.key});
 
   @override
-  State<EmptyClassroomsPage> createState() => _EmptyClassroomsPageState();
+  State<EmptyClassroomsPagestudent> createState() => _EmptyClassroomsPageState();
 }
 
-class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
+class _EmptyClassroomsPageState extends State<EmptyClassroomsPagestudent>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   String selectedFloor = 'All Floors';
-  String selectedType = 'All'; // New: Filter by type
+  String selectedType = 'All'; // Filter by type
   String searchQuery = '';
 
-  // Sample classroom data with occupancy status
-  final List<Map<String, dynamic>> classrooms = [
-    {
-      'name': 'Room 101',
-      'floor': '1st Floor',
-      'capacity': 60,
-      'occupied': true,
-      'subject': 'Mathematics',
-      'time': '9:00 AM - 10:00 AM',
-      'type': 'Class',
-    },
-    {
-      'name': 'Room 102',
-      'floor': '1st Floor',
-      'capacity': 50,
-      'occupied': false,
-      'subject': '',
-      'time': '',
-      'type': 'Class',
-    },
-    {
-      'name': 'Room 103',
-      'floor': '1st Floor',
-      'capacity': 40,
-      'occupied': true,
-      'subject': 'Physics',
-      'time': '10:00 AM - 11:00 AM',
-      'type': 'Class',
-    },
-    {
-      'name': 'Room 201',
-      'floor': '2nd Floor',
-      'capacity': 70,
-      'occupied': false,
-      'subject': '',
-      'time': '',
-      'type': 'Class',
-    },
-    {
-      'name': 'Room 202',
-      'floor': '2nd Floor',
-      'capacity': 55,
-      'occupied': true,
-      'subject': 'Chemistry',
-      'time': '11:00 AM - 12:00 PM',
-      'type': 'Class',
-    },
-    {
-      'name': 'Room 203',
-      'floor': '2nd Floor',
-      'capacity': 45,
-      'occupied': false,
-      'subject': '',
-      'time': '',
-      'type': 'Class',
-    },
-    {
-      'name': 'Room 301',
-      'floor': '3rd Floor',
-      'capacity': 80,
-      'occupied': true,
-      'subject': 'Computer Science',
-      'time': '2:00 PM - 3:00 PM',
-      'type': 'Class',
-    },
-    {
-      'name': 'Room 302',
-      'floor': '3rd Floor',
-      'capacity': 60,
-      'occupied': false,
-      'subject': '',
-      'time': '',
-      'type': 'Class',
-    },
-    {
-      'name': 'Room 303',
-      'floor': '3rd Floor',
-      'capacity': 50,
-      'occupied': true,
-      'subject': 'English',
-      'time': '3:00 PM - 4:00 PM',
-      'type': 'Class',
-    },
-    {
-      'name': 'Lab A',
-      'floor': '1st Floor',
-      'capacity': 30,
-      'occupied': false,
-      'subject': '',
-      'time': '',
-      'type': 'Lab',
-    },
-    {
-      'name': 'Lab B',
-      'floor': '2nd Floor',
-      'capacity': 35,
-      'occupied': true,
-      'subject': 'Electronics Lab',
-      'time': '1:00 PM - 3:00 PM',
-      'type': 'Lab',
-    },
-    {
-      'name': 'Computer Lab 1',
-      'floor': '3rd Floor',
-      'capacity': 40,
-      'occupied': false,
-      'subject': '',
-      'time': '',
-      'type': 'Lab',
-    },
-    {
-      'name': 'Physics Lab',
-      'floor': '2nd Floor',
-      'capacity': 25,
-      'occupied': true,
-      'subject': 'Physics Practical',
-      'time': '10:00 AM - 12:00 PM',
-      'type': 'Lab',
-    },
-  ];
+  // Dynamic Data State
+  List<dynamic> _allClassrooms = [];
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -143,6 +28,9 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
       duration: const Duration(milliseconds: 300),
     );
     _animationController.forward();
+
+    // Load data from backend
+    _fetchData();
   }
 
   @override
@@ -151,22 +39,48 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
     super.dispose();
   }
 
-  List<Map<String, dynamic>> get filteredClassrooms {
-    return classrooms.where((room) {
-      final matchesFloor =
-          selectedFloor == 'All Floors' || room['floor'] == selectedFloor;
-      final matchesType = selectedType == 'All' || room['type'] == selectedType;
-      final matchesSearch = room['name'].toLowerCase().contains(
-        searchQuery.toLowerCase(),
-      );
+  Future<void> _fetchData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final data = await ApiService.getClassroomStatus();
+      if (mounted) {
+        setState(() {
+          _allClassrooms = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = "Failed to load data: $e";
+        });
+      }
+    }
+  }
+
+  List<dynamic> get filteredClassrooms {
+    return _allClassrooms.where((room) {
+      // 1. Map Backend Fields to UI Helper Variables
+      final name = (room['roomNo'] ?? room['name'] ?? '').toString().toUpperCase();
+      // Database doesn't have 'type' yet, default to 'Class'
+      final type = (room['type'] ?? 'Class').toString();
+      final floor = (room['floor'] ?? '').toString();
+
+      // 2. Filter Logic
+      final matchesFloor = selectedFloor == 'All Floors' || floor == selectedFloor;
+      final matchesType = selectedType == 'All' || type == selectedType;
+      final matchesSearch = name.contains(searchQuery.toUpperCase());
+
       return matchesFloor && matchesType && matchesSearch;
     }).toList();
   }
 
-  int get occupiedCount =>
-      filteredClassrooms.where((room) => room['occupied'] == true).length;
-  int get availableCount =>
-      filteredClassrooms.where((room) => room['occupied'] == false).length;
+  int get occupiedCount => _allClassrooms.where((r) => r['isOccupied'] == true).length;
+  int get availableCount => _allClassrooms.length - occupiedCount;
 
   void _showFilterDialog() {
     showDialog(
@@ -261,181 +175,177 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // App Bar with gradient - Reduced height
-          SliverAppBar(
-            expandedHeight: 160,
-            pinned: true,
-            actions: [
-              // Filter Button
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
+      body: RefreshIndicator(
+        onRefresh: _fetchData,
+        child: CustomScrollView(
+          slivers: [
+            // App Bar
+            SliverAppBar(
+              expandedHeight: 160,
+              pinned: true,
+              actions: [
+                // Filter Button Only (Refresh Removed from top right)
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.filter_list, color: Colors.white),
+                      onPressed: _showFilterDialog,
+                      tooltip: 'Filter',
+                    ),
                   ),
-                  child: IconButton(
-                    icon: Stack(
-                      children: [
-                        const Icon(Icons.filter_list, color: Colors.white),
-                        if (selectedType != 'All')
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEF4444),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 1.5,
-                                ),
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 8,
-                                minHeight: 8,
-                              ),
-                            ),
-                          ),
+                ),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+                title: const Text(
+                  'Classroom Status',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    shadows: [Shadow(blurRadius: 8, color: Colors.black26)],
+                  ),
+                ),
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark
+                          ? [const Color(0xFF1A237E), const Color(0xFF0D47A1)]
+                          : [
+                        const Color(0xFF00ACC1), // Cyan
+                        const Color(0xFF26C6DA), // Light Cyan
                       ],
                     ),
-                    onPressed: _showFilterDialog,
-                    tooltip: 'Filter',
                   ),
-                ),
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              title: const Text(
-                'Classroom Status',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  shadows: [Shadow(blurRadius: 8, color: Colors.black26)],
-                ),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: isDark
-                        ? [const Color(0xFF1A237E), const Color(0xFF0D47A1)]
-                        : [
-                      const Color(0xFF00ACC1), // Cyan
-                      const Color(0xFF26C6DA), // Light Cyan
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        right: -50,
+                        top: -50,
+                        child: Icon(
+                          Icons.meeting_room,
+                          size: 180,
+                          color: Colors.white.withOpacity(0.1),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                child: Stack(
+              ),
+            ),
+
+            // Statistics Cards & Search
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
                   children: [
-                    Positioned(
-                      right: -50,
-                      top: -50,
-                      child: Icon(
-                        Icons.meeting_room,
-                        size: 180,
-                        color: Colors.white.withOpacity(0.1),
+                    // Loading Indicator
+                    if (_isLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 16.0),
+                        child: LinearProgressIndicator(),
+                      ),
+
+                    // Error Message
+                    if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                      ),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            context,
+                            'Occupied',
+                            occupiedCount.toString(),
+                            Icons.door_front_door,
+                            const Color(0xFFEF4444), // Red
+                            isDark,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            context,
+                            'Available',
+                            availableCount.toString(),
+                            Icons.meeting_room_outlined,
+                            const Color(0xFF10B981), // Green
+                            isDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Search Bar
+                    TextField(
+                      onChanged: (value) => setState(() => searchQuery = value),
+                      decoration: InputDecoration(
+                        hintText: 'Search classrooms...',
+                        prefixIcon: const Icon(Icons.search),
+                        filled: true,
+                        fillColor: scheme.surfaceContainerHighest,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Floor Filter Chips
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildFilterChip('All Floors', scheme),
+                          _buildFilterChip('Ground Floor', scheme),
+                          _buildFilterChip('1st Floor', scheme),
+                          _buildFilterChip('2nd Floor', scheme),
+                          _buildFilterChip('3rd Floor', scheme),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-          ),
 
-          // Statistics Cards
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          context,
-                          'Occupied',
-                          occupiedCount.toString(),
-                          Icons.door_front_door,
-                          const Color(0xFF10B981), // Green
-                          isDark,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          context,
-                          'Available',
-                          availableCount.toString(),
-                          Icons.meeting_room_outlined,
-                          const Color(0xFFEF4444), // Red
-                          isDark,
-                        ),
-                      ),
-                    ],
+            // Classroom Grid
+            if (!_isLoading)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 0.85,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
                   ),
-                  const SizedBox(height: 16),
-
-                  // Search Bar
-                  TextField(
-                    onChanged: (value) => setState(() => searchQuery = value),
-                    decoration: InputDecoration(
-                      hintText: 'Search classrooms...',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: scheme.surfaceContainerHighest,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 16,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Floor Filter Chips
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildFilterChip('All Floors', scheme),
-                        _buildFilterChip('1st Floor', scheme),
-                        _buildFilterChip('2nd Floor', scheme),
-                        _buildFilterChip('3rd Floor', scheme),
-                      ],
-                    ),
-                  ),
-                ],
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final room = filteredClassrooms[index];
+                    return _buildClassroomCard(context, room, isDark);
+                  }, childCount: filteredClassrooms.length),
+                ),
               ),
-            ),
-          ),
 
-          // Classroom Grid
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.85,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final room = filteredClassrooms[index];
-                return _buildClassroomCard(context, room, isDark);
-              }, childCount: filteredClassrooms.length),
-            ),
-          ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
-        ],
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          ],
+        ),
       ),
     );
   }
@@ -516,8 +426,18 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
       Map<String, dynamic> room,
       bool isDark,
       ) {
-    final isOccupied = room['occupied'] as bool;
-    final isLab = room['type'] == 'Lab';
+    // Handle Database Field Names
+    final roomName = room['roomNo'] ?? room['name'] ?? 'Unknown';
+    final floor = room['floor'] ?? '';
+    final capacity = room['capacity'] ?? 0;
+    final isOccupied = room['isOccupied'] == true;
+    final type = room['type'] ?? 'Class';
+    final isLab = type == 'Lab';
+
+    // Handle Nested Current Class Info
+    final currentClass = room['currentClass']; // Can be null
+    final subjectName = currentClass?['subject'] ?? '';
+
     final statusColor = isOccupied
         ? const Color(0xFFEF4444) // Red for occupied
         : const Color(0xFF10B981); // Green for available
@@ -607,7 +527,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
 
                     // Room name
                     Text(
-                      room['name'],
+                      roomName,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -644,7 +564,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                           ),
                           const SizedBox(width: 3),
                           Text(
-                            room['type'],
+                            type,
                             style: TextStyle(
                               fontSize: 10,
                               color: isLab
@@ -668,7 +588,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                         ),
                         const SizedBox(width: 3),
                         Text(
-                          room['floor'],
+                          floor,
                           style: TextStyle(
                             fontSize: 11,
                             color: scheme.onSurfaceVariant,
@@ -688,7 +608,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                         ),
                         const SizedBox(width: 3),
                         Text(
-                          '${room['capacity']} seats',
+                          '$capacity seats',
                           style: TextStyle(
                             fontSize: 11,
                             color: scheme.onSurfaceVariant,
@@ -697,8 +617,8 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                       ],
                     ),
 
-                    // Subject if occupied
-                    if (isOccupied && room['subject'].isNotEmpty) ...[
+                    // Subject if occupied (Safe Access)
+                    if (isOccupied && subjectName.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -710,7 +630,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(
-                          room['subject'],
+                          subjectName,
                           style: TextStyle(
                             fontSize: 10,
                             color: scheme.onPrimaryContainer,
@@ -732,7 +652,18 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
   }
 
   void _showClassroomDetails(BuildContext context, Map<String, dynamic> room) {
-    final isOccupied = room['occupied'] as bool;
+    final roomName = room['roomNo'] ?? room['name'] ?? 'Unknown';
+    final isOccupied = room['isOccupied'] == true;
+    final type = room['type'] ?? 'Class';
+    final floor = room['floor'] ?? '';
+    final capacity = room['capacity'] ?? 0;
+
+    // Nested Info
+    final currentClass = room['currentClass']; // Can be null
+    final subject = currentClass?['subject'] ?? '';
+    final className = currentClass?['className'] ?? '';
+    final teacher = currentClass?['teacher'] ?? '';
+
     final statusColor = isOccupied
         ? const Color(0xFFEF4444) // Red for occupied
         : const Color(0xFF10B981); // Green for available
@@ -788,7 +719,7 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        room['name'],
+                        roomName,
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -823,18 +754,23 @@ class _EmptyClassroomsPageState extends State<EmptyClassroomsPage>
             const SizedBox(height: 24),
 
             // Details
-            _buildDetailRow(Icons.category, 'Type', room['type'], scheme),
-            _buildDetailRow(Icons.layers, 'Floor', room['floor'], scheme),
+            _buildDetailRow(Icons.category, 'Type', type, scheme),
+            _buildDetailRow(Icons.layers, 'Floor', floor, scheme),
             _buildDetailRow(
               Icons.people,
               'Capacity',
-              '${room['capacity']} seats',
+              '$capacity seats',
               scheme,
             ),
 
-            if (isOccupied) ...[
-              _buildDetailRow(Icons.book, 'Subject', room['subject'], scheme),
-              _buildDetailRow(Icons.access_time, 'Time', room['time'], scheme),
+            // Show Occupant Info ONLY if occupied
+            if (isOccupied && currentClass != null) ...[
+              const Divider(height: 32),
+              const Text("Current Session", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              _buildDetailRow(Icons.book, 'Subject', subject, scheme),
+              _buildDetailRow(Icons.group, 'Class', className, scheme),
+              _buildDetailRow(Icons.person, 'Teacher', teacher, scheme),
             ],
 
             const SizedBox(height: 24),

@@ -24,9 +24,10 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
   final List<String> _branches = ['CSE', 'EEE', 'MECH', 'CIVIL', 'AIE', 'ECE'];
   final List<String> _semesters = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'];
   final List<String> _sections = ['A', 'B', 'C', 'D', 'E'];
-
-  // CHANGED: Removed 'Sat'
   final List<String> _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+  // LayerLink for stable dropdown anchoring
+  final LayerLink _layerLink = LayerLink();
 
   @override
   void initState() {
@@ -50,14 +51,10 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
     });
 
     try {
-      // 1. Fetch Courses
       final courses = await ApiService.getCourses(_branch, _semester, _section);
       setState(() => _availableCourses = courses);
 
-      // 2. Fetch Existing Timetable
       final timetable = await ApiService.getTimetable(_branch, _semester, _section);
-
-      // 3. Merge fetched grid into UI grid
       for (var day in timetable.grid) {
         final uiDayIndex = _grid.indexWhere((d) => d.dayName == day.dayName);
         if (uiDayIndex != -1) {
@@ -90,16 +87,20 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
 
       await ApiService.updateTimetable(payload);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Timetable Updated!'), backgroundColor: Colors.green),
-      );
-      Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Timetable Updated!'), backgroundColor: Colors.green),
+        );
+        Navigator.pop(context);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -117,33 +118,172 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('${_days[dayIndex]} - Slot ${slotIndex + 1}'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('${_days[dayIndex]} - Slot ${slotIndex + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text("Select Course", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 5),
                 DropdownButtonFormField<Course>(
                   value: selectedCourse,
-                  decoration: const InputDecoration(labelText: 'Select Course'),
                   isExpanded: true,
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                   items: _availableCourses.map((c) {
                     return DropdownMenuItem(
                       value: c,
-                      child: Text('${c.courseCode} - ${c.courseName}'),
+                      child: Text('${c.courseCode} - ${c.courseName}', overflow: TextOverflow.ellipsis),
                     );
                   }).toList(),
                   onChanged: (val) {
                     setDialogState(() => selectedCourse = val);
                   },
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 15),
+
                 Row(
                   children: [
-                    Expanded(child: RadioListTile<String>(title: const Text('Theory', style: TextStyle(fontSize: 12)), value: 'Theory', groupValue: type, contentPadding: EdgeInsets.zero, onChanged: (v) => setDialogState(() => type = v!))),
-                    Expanded(child: RadioListTile<String>(title: const Text('Lab', style: TextStyle(fontSize: 12)), value: 'Lab', groupValue: type, contentPadding: EdgeInsets.zero, onChanged: (v) => setDialogState(() => type = v!))),
+                    Expanded(child: _buildRadioTile('Theory', type, (v) => setDialogState(() => type = v))),
+                    const SizedBox(width: 10),
+                    Expanded(child: _buildRadioTile('Lab', type, (v) => setDialogState(() => type = v))),
                   ],
                 ),
-                TextField(controller: roomCtrl, decoration: const InputDecoration(labelText: 'Room No')),
+                const SizedBox(height: 15),
+
+                const Text("Search Room", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 5),
+
+                // --- FIXED ROOM SEARCH ---
+                RawAutocomplete<Map<String, dynamic>>(
+                  optionsBuilder: (TextEditingValue textEditingValue) async {
+                    if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+                    // Backend now returns max 5 results
+                    return await ApiService.searchRoomsWithStatus(
+                        textEditingValue.text,
+                        _days[dayIndex],
+                        slotIndex
+                    );
+                  },
+                  onSelected: (Map<String, dynamic> selection) {
+                    if (selection['status'] == 'occupied') {
+                      // Warning for Admin
+                      showDialog(
+                        context: context,
+                        builder: (c) => AlertDialog(
+                          title: const Text("Room Occupied"),
+                          content: Text("Room ${selection['roomNo']} is assigned to ${selection['occupiedBy']}. Proceed?"),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cancel")),
+                            TextButton(
+                                onPressed: () {
+                                  roomCtrl.text = selection['roomNo'];
+                                  Navigator.pop(c);
+                                },
+                                child: const Text("Use Anyway", style: TextStyle(color: Colors.red))
+                            ),
+                          ],
+                        ),
+                      );
+                    } else {
+                      roomCtrl.text = selection['roomNo'];
+                    }
+                  },
+
+                  fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                    if (textEditingController.text != roomCtrl.text) {
+                      textEditingController.text = roomCtrl.text;
+                    }
+                    textEditingController.addListener(() {
+                      roomCtrl.text = textEditingController.text;
+                    });
+
+                    // Using CompositedTransformTarget to anchor the dropdown
+                    return CompositedTransformTarget(
+                      link: _layerLink,
+                      child: TextFormField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. N301',
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                      ),
+                    );
+                  },
+
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: CompositedTransformFollower(
+                        link: _layerLink,
+                        showWhenUnlinked: false,
+                        targetAnchor: Alignment.bottomLeft,
+                        child: Material(
+                          elevation: 4.0,
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            // Fixed width prevents layout errors
+                            width: 250,
+                            // Height limited to ~5 items (60px each)
+                            height: 300,
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              itemCount: options.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final option = options.elementAt(index);
+                                final isOccupied = option['status'] == 'occupied';
+                                return ListTile(
+                                  title: Text(option['roomNo'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  trailing: Container(
+                                    width: 12, height: 12,
+                                    decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: isOccupied ? Colors.red : Colors.green,
+                                        boxShadow: [BoxShadow(color: (isOccupied ? Colors.red : Colors.green).withOpacity(0.4), blurRadius: 4)]
+                                    ),
+                                  ),
+                                  subtitle: isOccupied
+                                      ? Text("Occupied (${option['occupiedBy']})", style: const TextStyle(fontSize: 10, color: Colors.red))
+                                      : const Text("Available", style: TextStyle(fontSize: 10, color: Colors.green)),
+                                  onTap: () => onSelected(option),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                if (selectedCourse != null) ...[
+                  const SizedBox(height: 15),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue.shade100)
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Faculty Assigned:', style: TextStyle(fontSize: 10, color: Colors.blue.shade900)),
+                        const SizedBox(height: 4),
+                        Text(selectedCourse!.facultyName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  )
+                ]
               ],
             ),
           ),
@@ -178,6 +318,55 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
     );
   }
 
+  Widget _buildDropdown(String label, List<String> items, String current, ValueChanged<String?> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 4),
+        DropdownButtonFormField<String>(
+          value: current,
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13)))).toList(),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRadioTile(String label, String groupValue, ValueChanged<String> onChanged) {
+    final isSelected = label == groupValue;
+    return GestureDetector(
+      onTap: () => onChanged(label),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+            color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent,
+            border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8)
+        ),
+        alignment: Alignment.center,
+        child: Text(label, style: TextStyle(
+            color: isSelected ? Colors.blue : Colors.black87,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+        )),
+      ),
+    );
+  }
+
+  Color _hexToColor(String hex) {
+    try {
+      hex = hex.replaceAll('#', '');
+      if (hex.length == 6) hex = 'FF$hex';
+      return Color(int.parse(hex, radix: 16));
+    } catch (_) {
+      return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -186,6 +375,7 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
         children: [
           Card(
             margin: const EdgeInsets.all(12),
+            elevation: 2,
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -233,7 +423,6 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
                         itemBuilder: (ctx, slotIdx) {
                           final slot = _grid[i].slots[slotIdx];
                           final hasData = slot.courseCode.isNotEmpty;
-
                           return GestureDetector(
                             onTap: () => _editSlot(i, slotIdx),
                             child: Container(
@@ -251,10 +440,10 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
                                   Text('Slot ${slotIdx + 1}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                                   if (hasData) ...[
                                     const SizedBox(height: 4),
-                                    Text(slot.courseCode, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                    Text(slot.courseCode, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 11), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
                                     Text(slot.type, style: const TextStyle(fontSize: 10, color: Colors.white70)),
-                                  ] else
-                                    const Icon(Icons.edit, size: 16, color: Colors.grey),
+                                    if (slot.room.isNotEmpty) Text(slot.room, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                  ] else const Icon(Icons.edit, size: 16, color: Colors.grey),
                                 ],
                               ),
                             ),
@@ -282,24 +471,5 @@ class _EditTimetablePageState extends State<EditTimetablePage> {
         ],
       ),
     );
-  }
-
-  Widget _buildDropdown(String label, List<String> items, String current, ValueChanged<String?> onChanged) {
-    return DropdownButtonFormField<String>(
-      value: current,
-      decoration: InputDecoration(labelText: label, contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-      items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13)))).toList(),
-      onChanged: onChanged,
-    );
-  }
-
-  Color _hexToColor(String hex) {
-    try {
-      hex = hex.replaceAll('#', '');
-      if (hex.length == 6) hex = 'FF$hex';
-      return Color(int.parse(hex, radix: 16));
-    } catch (_) {
-      return Colors.grey;
-    }
   }
 }

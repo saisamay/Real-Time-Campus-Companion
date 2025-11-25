@@ -9,6 +9,7 @@ import 'main.dart';
 import 'profile_page.dart';
 import 'emptyclassrooms_page.dart'; // CR uses this (Edit access)
 import 'Events_page.dart';
+import 'find_friend_page.dart';
 
 // Class Representative Home Page Class
 class HomePage extends StatefulWidget {
@@ -696,13 +697,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                   _buildDrawerItem(
                     icon: Icons.search_rounded,
-                    title: "Find Friend Class Room",
+                    title: "Find Friend Class Room", // Or "Find Friend"
                     onTap: () {
-                      Navigator.pop(context);
+                      Navigator.pop(context); // Close the drawer first
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const FindClassRoomPage(),
+                          builder: (_) => const FindFriendPage(), // Navigate to new page
                         ),
                       );
                     },

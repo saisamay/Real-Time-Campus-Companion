@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'api_service.dart';
 import 'timetable_model.dart';
@@ -7,7 +8,7 @@ class StudentTimetablePage extends StatefulWidget {
   final String? initialBranch;
   final String? initialSemester;
   final String? initialSection;
-  final String? userRole; // <--- NEW PARAMETER
+  final String? userRole;
 
   const StudentTimetablePage({
     super.key,
@@ -15,7 +16,7 @@ class StudentTimetablePage extends StatefulWidget {
     this.initialBranch,
     this.initialSemester,
     this.initialSection,
-    this.userRole, // <--- Add to constructor
+    this.userRole,
   });
 
   @override
@@ -27,6 +28,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
   String? _error;
   Timetable? _currentTimetable;
 
+  // Profile Data
   String? _myBranch;
   String? _mySemester;
   String? _mySection;
@@ -53,48 +55,45 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     {'no': '9', 'time': '04:00 - 04:50'},
   ];
 
+  final LayerLink _layerLink = LayerLink();
+  final TextEditingController _roomSearchController = TextEditingController();
+
+  // Debounce timer to prevent API spam
+  Timer? _debounce;
+
   @override
   void initState() {
     super.initState();
     selectedBranch = widget.initialBranch ?? 'CSE';
     selectedSemester = widget.initialSemester ?? 'S5';
     selectedSection = widget.initialSection ?? 'A';
-
-    // IMMEDIATE FIX: Set role directly from parent if provided
     _myRole = widget.userRole;
-
     _initialize();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _roomSearchController.dispose();
+    super.dispose();
   }
 
   Future<void> _initialize() async {
     setState(() => _isLoading = true);
     try {
-      // 1. Read Secure Storage
       final branch = await ApiService.readBranch();
       final semester = await ApiService.readSemester();
       final section = await ApiService.readSection();
       final role = await ApiService.readRole();
 
-      // 2. Update State (Prioritize passed role, fallback to storage)
-      // If widget.userRole was passed, keep it. Otherwise use stored role.
       _myRole = widget.userRole ?? role;
       _myBranch = branch;
       _mySemester = semester;
       _mySection = section;
 
-      // 3. Override Defaults if Storage Has Data
       if (widget.initialBranch == null && branch != null) selectedBranch = branch;
       if (widget.initialSemester == null && semester != null) selectedSemester = semester;
       if (widget.initialSection == null && section != null) selectedSection = section;
-
-      // Sync selected values if we have profile data and they differ
-      // This ensures a CR viewing their own class sees the edit options immediately
-      if (_canEdit && _myBranch != null) {
-        // Optional: force selection to match profile to enable editing immediately
-        // selectedBranch = _myBranch!;
-        // selectedSemester = _mySemester!;
-        // selectedSection = _mySection!;
-      }
 
       await _loadTimetable();
     } catch (e) {
@@ -110,11 +109,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
       _error = null;
     });
     try {
-      final timetable = await ApiService.getTimetable(
-          selectedBranch,
-          selectedSemester,
-          selectedSection
-      );
+      final timetable = await ApiService.getTimetable(selectedBranch, selectedSemester, selectedSection);
       setState(() => _currentTimetable = timetable);
     } catch (e) {
       setState(() {
@@ -126,7 +121,6 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     }
   }
 
-  // --- CRITICAL PERMISSION CHECK ---
   bool get _canEdit {
     if (_myRole == null) return false;
     final role = _myRole!.trim().toLowerCase();
@@ -134,12 +128,10 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     if (role == 'teacher' || role == 'faculty' || role == 'admin' || role == 'superadmin') return true;
 
     if (role == 'classrep' || role == 'cr' || role == 'class_rep') {
-      // Check if viewing their own class
-      // If _myBranch is null (storage failed), we might be editing "blindly" based on role alone
-      // but strict safety requires checking the branch.
-      // However, since we passed 'initialBranch' correctly, let's trust the match if profile is loaded.
-      if (_myBranch == null) return true; // Allow if role is explicitly passed as CR (trusting the user context)
+      if (widget.initialBranch != null) return true;
+      if (_myBranch == null || _mySemester == null || _mySection == null) return true;
 
+      // Strict check: CR can only edit THEIR OWN section
       return selectedBranch == _myBranch &&
           selectedSemester == _mySemester &&
           selectedSection == _mySection;
@@ -147,11 +139,11 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     return false;
   }
 
-  // --- API ACTION ---
   Future<void> _updateSlot(String day, int index, bool isCancelled, String? newRoom) async {
     if (newRoom != null && newRoom.trim().isEmpty) newRoom = null;
 
     try {
+      // 1. Optimistic Update (Update UI immediately)
       if (_currentTimetable != null) {
         setState(() {
           final dayData = _currentTimetable!.grid.firstWhere((d) => d.dayName == day);
@@ -162,6 +154,7 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
         });
       }
 
+      // 2. Call Backend
       await ApiService.updateSlot(
         semester: selectedSemester,
         branch: selectedBranch,
@@ -174,173 +167,309 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Updated Successfully!'), backgroundColor: Colors.green),
+            const SnackBar(content: Text('Updated Successfully!'), backgroundColor: Colors.green)
         );
       }
     } catch (e) {
+      // 3. Revert on Error
       if (mounted) {
         _loadTimetable();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red)
         );
       }
     }
   }
 
   void _showSlotDetails(TimetableSlot slot, String day, int index) {
-    bool canEdit = _canEdit;
-    bool canChangeRoom = canEdit && slot.room.isEmpty;
-    TextEditingController roomController = TextEditingController(text: slot.newRoom ?? slot.room);
+    final bool canEdit = _canEdit;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final TextEditingController roomCtrl = TextEditingController(text: slot.newRoom ?? slot.room);
+    _roomSearchController.text = roomCtrl.text;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) {
+      isScrollControlled: true,
+      builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(slot.courseName, style: const TextStyle(fontWeight: FontWeight.bold)),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
+            return Padding(
+              // Ensure bottom padding respects keyboard
+                padding: EdgeInsets.only(
+                    left: 20,
+                    right: 20,
+                    top: 20,
+                    bottom: MediaQuery.of(context).viewInsets.bottom
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(children: [
                         CircleAvatar(
-                          radius: 25,
-                          backgroundColor: Colors.blue.shade100,
-                          child: const Icon(Icons.person, color: Colors.blue),
+                          radius: 20,
+                          backgroundColor: isDark ? Colors.blue.shade700 : Colors.blue,
+                          child: const Icon(Icons.person, color: Colors.white, size: 20),
                         ),
-                        const SizedBox(width: 15),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                  slot.facultyName.isNotEmpty ? slot.facultyName : "Faculty Not Assigned",
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)
-                              ),
-                              Text("Dept: ${_myBranch ?? 'Unknown'}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                            ],
-                          ),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(
+                              slot.facultyName.isNotEmpty ? slot.facultyName : "No Faculty",
+                              style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+                            ),
+                            if (slot.facultyDept.isNotEmpty)
+                              Text("Dept: ${slot.facultyDept}", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey)),
+                          ]),
                         )
-                      ],
-                    ),
-                    const Divider(height: 30),
-
-                    _detailRow(Icons.access_time, timeSlots[index]['time'] ?? "Unknown Time"),
-                    const SizedBox(height: 10),
-                    _detailRow(Icons.location_on,
-                        (slot.newRoom != null && slot.newRoom!.isNotEmpty)
-                            ? "${slot.newRoom} (Updated)"
-                            : (slot.room.isNotEmpty ? slot.room : "No Room Assigned")
-                    ),
-
-                    if (canEdit && slot.courseCode.isNotEmpty) ...[
+                      ]),
                       const SizedBox(height: 20),
-                      const Text("Actions", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text("Cancel Class", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                        value: slot.isCancelled,
-                        activeColor: Colors.red,
-                        onChanged: (val) {
-                          setDialogState(() {
-                            slot.isCancelled = val;
-                          });
-                          _updateSlot(day, index, val, slot.newRoom);
-                        },
+                      _detailRow(Icons.access_time, timeSlots[index]['time'] ?? "-", isDark),
+                      const SizedBox(height: 8),
+                      _detailRow(
+                        Icons.location_on,
+                        (slot.newRoom != null && slot.newRoom!.isNotEmpty)
+                            ? "${slot.newRoom} (Changed)"
+                            : (slot.room.isNotEmpty ? slot.room : "No Room"),
+                        isDark,
                       ),
 
-                      if (canChangeRoom)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Divider(),
-                            TextField(
-                              controller: roomController,
-                              enabled: !slot.isCancelled,
-                              decoration: InputDecoration(
-                                  labelText: "Assign Room (Temp)",
-                                  hintText: "Enter Room No (e.g. N205)",
-                                  border: const OutlineInputBorder(),
-                                  suffixIcon: IconButton(
-                                    icon: const Icon(Icons.save, color: Colors.green),
-                                    onPressed: () {
-                                      setDialogState(() {
-                                        slot.newRoom = roomController.text;
-                                      });
-                                      _updateSlot(day, index, slot.isCancelled, roomController.text);
-                                    },
-                                  )
-                              ),
-                            ),
-                          ],
-                        )
-                      else if (canEdit && slot.room.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 10.0),
-                          child: Text(
-                            "Permanent room (${slot.room}) set by Admin cannot be overridden here.",
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontStyle: FontStyle.italic),
+                      if (canEdit && slot.courseCode.isNotEmpty) ...[
+                        Divider(height: 30, color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                        Text("Class Actions", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.blue.shade300 : Colors.blue)),
+
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text("Cancel Class", style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                          subtitle: Text("Mark as not occupied", style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey)),
+                          value: slot.isCancelled,
+                          activeColor: Colors.red,
+                          onChanged: (val) {
+                            setDialogState(() => slot.isCancelled = val);
+                            _updateSlot(day, index, val, slot.newRoom);
+                          },
+                        ),
+
+                        if (!slot.isCancelled) ...[
+                          const SizedBox(height: 10),
+                          Text("Change Room", style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey)),
+                          const SizedBox(height: 5),
+
+                          // --- NEW: AUTOCOMPLETE WITH CONFLICT DETECTION ---
+                          // Using a Map option so we can show status & occupiedBy
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              return RawAutocomplete<Map<String, dynamic>>(
+                                optionsBuilder: (TextEditingValue textEditingValue) async {
+                                  if (textEditingValue.text.isEmpty) return const Iterable.empty();
+                                  try {
+                                    final List<Map<String, dynamic>> res = await ApiService.searchRoomsWithStatus(
+                                      textEditingValue.text,
+                                      day,
+                                      index,
+                                    );
+                                    return res;
+                                  } catch (e) {
+                                    // On error return empty to keep UI stable
+                                    return const Iterable.empty();
+                                  }
+                                },
+                                displayStringForOption: (option) => option['roomNo']?.toString() ?? '',
+                                onSelected: (Map<String, dynamic> selection) {
+                                  final roomNo = selection['roomNo']?.toString() ?? '';
+                                  // warn if occupied
+                                  if (selection['status'] == 'occupied') {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("Warning: $roomNo is already assigned to ${selection['occupiedBy'] ?? 'someone'}"),
+                                        backgroundColor: Colors.orange,
+                                      ),
+                                    );
+                                  }
+                                  roomCtrl.text = roomNo;
+                                  _roomSearchController.text = roomNo;
+                                  setDialogState(() => slot.newRoom = roomNo);
+                                  // Save immediately
+                                  _updateSlot(day, index, slot.isCancelled, roomNo);
+                                },
+
+                                fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                                  // Keep controllers in sync
+                                  if (textEditingController.text != roomCtrl.text) {
+                                    textEditingController.text = roomCtrl.text;
+                                  }
+                                  textEditingController.addListener(() {
+                                    roomCtrl.text = textEditingController.text;
+                                  });
+
+                                  return CompositedTransformTarget(
+                                    link: _layerLink,
+                                    child: TextFormField(
+                                      controller: textEditingController,
+                                      focusNode: focusNode,
+                                      textCapitalization: TextCapitalization.characters,
+                                      style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                                      decoration: InputDecoration(
+                                        hintText: "Search Room (e.g. N301)",
+                                        prefixIcon: Icon(Icons.search, color: isDark ? Colors.grey.shade400 : Colors.grey),
+                                        filled: true,
+                                        fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                        suffixIcon: IconButton(
+                                          icon: const Icon(Icons.save, color: Colors.green),
+                                          onPressed: () {
+                                            final val = _roomSearchController.text.trim();
+                                            setDialogState(() => slot.newRoom = val);
+                                            _updateSlot(day, index, slot.isCancelled, val);
+                                            Navigator.pop(context);
+                                          },
+                                        ),
+                                      ),
+                                      onChanged: (v) {
+                                        // Mirror typed value to internal controller used elsewhere
+                                        _roomSearchController.text = v;
+                                      },
+                                    ),
+                                  );
+                                },
+
+                                optionsViewBuilder: (context, onSelected, options) {
+                                  final opts = options.toList();
+                                  // Width: try to use available dialog width, but limit to screen width - side paddings
+                                  final overlayWidth = (constraints.maxWidth < 260) ? (MediaQuery.of(context).size.width - 40) : constraints.maxWidth;
+                                  return Align(
+                                    alignment: Alignment.topLeft,
+                                    child: CompositedTransformFollower(
+                                      link: _layerLink,
+                                      showWhenUnlinked: false,
+                                      targetAnchor: Alignment.bottomLeft,
+                                      child: Material(
+                                        elevation: 8,
+                                        color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: SizedBox(
+                                          width: overlayWidth,
+                                          height: 200,
+                                          child: ListView.separated(
+                                            padding: EdgeInsets.zero,
+                                            itemCount: opts.length,
+                                            separatorBuilder: (_, __) => Divider(height: 1, color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+                                            itemBuilder: (context, optIndex) {
+                                              final option = opts[optIndex];
+                                              final roomNo = option['roomNo']?.toString() ?? '';
+                                              final isOccupied = option['status'] == 'occupied';
+                                              return ListTile(
+                                                title: Text(roomNo, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                                                trailing: Container(
+                                                  width: 12,
+                                                  height: 12,
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color: isOccupied ? Colors.red : Colors.green,
+                                                    boxShadow: [BoxShadow(color: (isOccupied ? Colors.red : Colors.green).withOpacity(0.35), blurRadius: 4)],
+                                                  ),
+                                                ),
+                                                subtitle: isOccupied
+                                                    ? Text("Occupied by ${option['occupiedBy'] ?? 'unknown'}", style: const TextStyle(fontSize: 12, color: Colors.red))
+                                                    : const Text("Available", style: TextStyle(fontSize: 12, color: Colors.green)),
+                                                onTap: () => onSelected(option),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
                           ),
-                        )
-                    ]
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close"))
-              ],
-            );
+                        ],
+                      ],
+
+                      // --- CRITICAL UI FIX: EXTRA SCROLL SPACE ---
+                      // This invisible box forces the scroll view to have space at the bottom.
+                      // When keyboard opens, you can scroll the text field UP,
+                      // and the dropdown will have space to render below it.
+                      const SizedBox(height: 250),
+                    ],
+                  ),
+                ));
           },
         );
       },
     );
   }
 
-  Widget _detailRow(IconData icon, String text) {
-    return Row(children: [Icon(icon, size: 18, color: Colors.grey), const SizedBox(width: 10), Text(text)]);
+  Widget _detailRow(IconData icon, String text, bool isDark) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: isDark ? Colors.grey.shade400 : Colors.grey),
+        const SizedBox(width: 10),
+        Text(text, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+      ],
+    );
   }
 
-  // --- DEBUG INFO WIDGET ---
   Widget _buildDebugInfo() {
-    bool canEdit = _canEdit;
+    final bool canEdit = _canEdit;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(8.0),
       margin: const EdgeInsets.symmetric(horizontal: 16.0),
       decoration: BoxDecoration(
-        color: canEdit ? Colors.green.shade50 : Colors.red.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: canEdit ? Colors.green.shade200 : Colors.red.shade200),
+        color: canEdit
+            ? (isDark ? Colors.green.shade900.withOpacity(0.3) : Colors.green.shade50)
+            : (isDark ? Colors.red.shade900.withOpacity(0.3) : Colors.red.shade50),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("MY ROLE: ${_myRole?.toUpperCase() ?? 'N/A'}", style: TextStyle(fontWeight: FontWeight.bold, color: canEdit ? Colors.green.shade800 : Colors.red.shade800)),
-          if (_myRole == 'classrep' || _myRole == 'cr')
-            Text("CLASS CHECK: ${_myBranch ?? 'N/A'}-${_mySemester ?? 'N/A'}-${_mySection ?? 'N/A'} vs $selectedBranch-$selectedSemester-$selectedSection", style: TextStyle(fontSize: 10, color: Colors.grey)),
-          Text("EDIT STATUS: ${canEdit ? 'ENABLED' : 'DISABLED'}", style: TextStyle(fontWeight: FontWeight.bold, color: canEdit ? Colors.green.shade700 : Colors.red.shade700)),
-        ],
+      child: Text(
+        "Role: ${_myRole ?? 'N/A'} | Edit: ${canEdit ? 'YES' : 'NO'}",
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: canEdit
+              ? (isDark ? Colors.green.shade300 : Colors.green.shade900)
+              : (isDark ? Colors.red.shade300 : Colors.red.shade900),
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      appBar: widget.embedded ? null : AppBar(title: const Text('Timetable'), centerTitle: true),
+      backgroundColor: isDark ? const Color(0xFF121212) : null,
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+        title: const Text('Timetable'),
+        centerTitle: true,
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : null,
+        foregroundColor: isDark ? Colors.white : null,
+      ),
       body: Column(
         children: [
           _buildControls(),
-          if (!_isLoading) _buildDebugInfo(), // KEEP THIS until verified
+          // if (!_isLoading) _buildDebugInfo(), // Debugging role info
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                ? Center(child: Text(_error!, style: const TextStyle(color: Colors.grey)))
+                ? Center(
+              child: Text(
+                _error!,
+                style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey),
+              ),
+            )
                 : _buildTimetableGrid(),
           ),
         ],
@@ -348,15 +477,13 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     );
   }
 
-  // ... _buildControls, _buildDropdown, _buildTimetableGrid (Keep existing working code for these) ...
-  // (I will paste them below to ensure the file is complete)
-
   Widget _buildControls() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Card(
         elevation: 0,
-        color: Colors.grey.shade100,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.grey.shade100,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -364,11 +491,35 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
             children: [
               Row(
                 children: [
-                  Expanded(child: _buildDropdown('Branch', branches, selectedBranch, (v) => setState(() { selectedBranch = v!; _currentTimetable = null; }))),
+                  Expanded(
+                    child: _buildDropdown(
+                      'Branch',
+                      branches,
+                      selectedBranch,
+                          (v) => setState(() { selectedBranch = v!; _currentTimetable = null; }),
+                      isDark,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _buildDropdown('Sem', semesters, selectedSemester, (v) => setState(() { selectedSemester = v!; _currentTimetable = null; }))),
+                  Expanded(
+                    child: _buildDropdown(
+                      'Sem',
+                      semesters,
+                      selectedSemester,
+                          (v) => setState(() { selectedSemester = v!; _currentTimetable = null; }),
+                      isDark,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _buildDropdown('Sec', sections, selectedSection, (v) => setState(() { selectedSection = v!; _currentTimetable = null; }))),
+                  Expanded(
+                    child: _buildDropdown(
+                      'Sec',
+                      sections,
+                      selectedSection,
+                          (v) => setState(() { selectedSection = v!; _currentTimetable = null; }),
+                      isDark,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -377,9 +528,9 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
                 child: FilledButton.icon(
                   onPressed: _loadTimetable,
                   style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E2749),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 14)
+                    backgroundColor: isDark ? Colors.blue.shade700 : const Color(0xFF1E2749),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   icon: const Icon(Icons.search),
                   label: const Text('View Timetable'),
@@ -392,21 +543,22 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
     );
   }
 
-  Widget _buildDropdown(String label, List<String> items, String current, ValueChanged<String?> onChanged) {
+  Widget _buildDropdown(String label, List<String> items, String current, ValueChanged<String?> onChanged, bool isDark) {
     return Container(
       decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300)
+        color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: current,
           isExpanded: true,
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.black54),
-          style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
-          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+          icon: Icon(Icons.arrow_drop_down, color: isDark ? Colors.grey.shade400 : Colors.black54),
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.w500),
+          dropdownColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: TextStyle(color: isDark ? Colors.white : Colors.black87)))).toList(),
           onChanged: onChanged,
         ),
       ),
@@ -415,14 +567,12 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
 
   Widget _buildTimetableGrid() {
     if (_currentTimetable == null) return const SizedBox.shrink();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Color hexToColor(String hex) {
       try { return Color(int.parse(hex.replaceAll('#', ''), radix: 16) | 0xFF000000); } catch (_) { return Colors.white; }
     }
-
     final Map<String, List<TimetableSlot>> gridMap = {};
-    for (var d in _currentTimetable!.grid) {
-      gridMap[d.dayName] = d.slots;
-    }
+    for (var d in _currentTimetable!.grid) { gridMap[d.dayName] = d.slots; }
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -441,8 +591,8 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Column(
                     children: [
-                      Text(s['time']!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      Text('(${s['no']})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      Text(s['time']!, style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey)),
+                      Text('(${s['no']})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.grey.shade300 : Colors.black87)),
                     ],
                   ),
                 )),
@@ -453,59 +603,47 @@ class _StudentTimetablePageState extends State<StudentTimetablePage> {
               return Row(
                 children: [
                   Container(
-                    width: 100,
-                    height: 110,
+                    width: 100, height: 110,
                     margin: const EdgeInsets.only(bottom: 8, right: 8),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+                    decoration: BoxDecoration(color: isDark ? const Color(0xFF2A2A2A) : Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300)),
                     alignment: Alignment.center,
-                    child: Text(day, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text(day, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.white : Colors.black87)),
                   ),
                   ...List.generate(9, (index) {
                     final slot = daySlots.length > index ? daySlots[index] : TimetableSlot();
                     final hasClass = slot.courseCode.isNotEmpty;
-                    Color bg = hasClass ? hexToColor(slot.color).withOpacity(0.2) : Colors.transparent;
-                    if (slot.isCancelled) bg = Colors.red.shade50;
+                    Color bg;
+                    if (slot.isCancelled) { bg = isDark ? Colors.red.shade900.withOpacity(0.3) : Colors.red.shade50; }
+                    else if (hasClass) { final base = hexToColor(slot.color); bg = isDark ? base.withOpacity(0.25) : base.withOpacity(0.2); }
+                    else { bg = Colors.transparent; }
 
                     return GestureDetector(
                       onTap: () => _showSlotDetails(slot, day, index),
                       child: Container(
-                        width: 150,
-                        height: 110,
+                        width: 150, height: 110,
                         margin: const EdgeInsets.only(bottom: 8, right: 8),
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: bg,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: hasClass ? hexToColor(slot.color).withOpacity(0.5) : Colors.grey.shade200),
+                          border: Border.all(color: hasClass ? (isDark ? hexToColor(slot.color).withOpacity(0.6) : hexToColor(slot.color).withOpacity(0.5)) : (isDark ? Colors.grey.shade800 : Colors.grey.shade200)),
                         ),
                         child: hasClass ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(slot.courseName, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey.shade900)),
+                            Text(slot.courseName, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isDark ? Colors.white : Colors.blueGrey.shade900)),
                             const Spacer(),
-                            Text(slot.facultyName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade700)),
+                            Text(slot.facultyName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade300 : Colors.blueGrey.shade700)),
                             const SizedBox(height: 4),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                      slot.isCancelled ? 'CANCELLED' : (slot.newRoom ?? slot.room),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: slot.isCancelled ? Colors.red : Colors.black87)
-                                  ),
-                                ),
-                                Flexible(
-                                  child: Text(
-                                      '(${index+1})',
-                                      style: const TextStyle(fontSize: 10, color: Colors.grey)
-                                  ),
-                                ),
+                                Expanded(child: Text(slot.isCancelled ? 'CANCELLED' : (slot.newRoom ?? slot.room), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: slot.isCancelled ? (isDark ? Colors.red.shade300 : Colors.red) : (isDark ? Colors.white : Colors.black87)))),
+                                Flexible(child: Text('(${index+1})', style: TextStyle(fontSize: 10, color: isDark ? Colors.grey.shade500 : Colors.grey))),
                               ],
                             )
                           ],
-                        ) : const Center(child: Text("-", style: TextStyle(color: Colors.grey))),
+                        ) : Center(child: Text("-", style: TextStyle(color: isDark ? Colors.grey.shade700 : Colors.grey.shade400))),
                       ),
                     );
                   })

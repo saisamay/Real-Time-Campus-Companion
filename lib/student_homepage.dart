@@ -10,6 +10,7 @@ import 'main.dart';
 import 'profile_page.dart';
 import 'emptyclassrooms_page_student.dart';
 import 'Events_page.dart';
+import 'find_friend_page.dart';
 
 class StudentHomePage extends StatefulWidget {
   final String universityName;
@@ -656,13 +657,13 @@ class _StudentHomePageState extends State<StudentHomePage>
                   ),
                   _buildDrawerItem(
                     icon: Icons.search_rounded,
-                    title: "Find Friend Class Room",
+                    title: "Find Friend Class Room", // Or "Find Friend"
                     onTap: () {
-                      Navigator.pop(context);
+                      Navigator.pop(context); // Close the drawer first
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const FindClassRoomPage(),
+                          builder: (_) => const FindFriendPage(), // Navigate to new page
                         ),
                       );
                     },
@@ -731,7 +732,7 @@ class _StudentHomePageState extends State<StudentHomePage>
             userRole: 'student',
           ),
           const EventsPage(),
-          const EmptyClassroomsPage(),
+          const EmptyClassroomsPagestudent(),
           ProfilePage(
             userName: userName,
             userEmail: userEmail,
