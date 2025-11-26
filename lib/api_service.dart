@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'timetable_model.dart';
+import 'timetable_model.dart'; // Ensure this model file exists
 
 final _storage = const FlutterSecureStorage();
 const _tokenKey = 'auth_token';
@@ -13,11 +13,11 @@ const _userSemesterKey = 'user_semester';
 const _userRoleKey = 'user_role';
 
 class ApiService {
-  // Change to 'http://127.0.0.1:4000' if using iOS Simulator or Web
+  // Base URL: Use 10.0.2.2 for Android Emulator, 127.0.0.1 for iOS/Web
   static const String baseUrl = 'http://127.0.0.1:4000';
 
   // ===========================================================================
-  // 1. HEADERS & AUTH
+  // 1. HEADERS & TOKENS
   // ===========================================================================
 
   static Future<Map<String, String>> _headers({bool auth = false}) async {
@@ -60,7 +60,7 @@ class ApiService {
   static Future<String?> readRole() async => await _storage.read(key: _userRoleKey);
 
   // ===========================================================================
-  // 2. LOGIN & NOTIFICATIONS
+  // 2. AUTHENTICATION & NOTIFICATIONS
   // ===========================================================================
 
   static Future<Map> login(String email, String password) async {
@@ -84,7 +84,6 @@ class ApiService {
     throw Exception(jsonDecode(res.body)['error'] ?? 'Forgot password failed');
   }
 
-  // --- PUSH NOTIFICATION TOKEN ---
   static Future<void> updateFcmToken(String token) async {
     final uri = Uri.parse('$baseUrl/api/user/fcm-token');
     try {
@@ -95,7 +94,156 @@ class ApiService {
   }
 
   // ===========================================================================
-  // 3. COURSES
+  // 3. USER MANAGEMENT (Create, Update, Search, Get)
+  // ===========================================================================
+
+  // Added from Code A: Essential for fetching details before editing
+  static Future<Map<String, dynamic>> getUserById(String id) async {
+    final response = await http.get(
+        Uri.parse('$baseUrl/api/user/$id'),
+        headers: await _headers(auth: true)
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json['user'];
+    } else {
+      throw Exception('Failed to fetch user details');
+    }
+  }
+
+  // Merged: Added cabinRoom and availability
+  static Future<Map<String, dynamic>> createUserWithProfile({
+    required String name,
+    required String email,
+    required String password,
+    required DateTime dob,
+    required String profilePath,
+    required String role,
+    required String rollNo,
+    required String semester,
+    required String section,
+    required String branch,
+    String? cabinRoom,      // Merged
+    bool? availability,     // Merged
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/user');
+    var request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(await _headers(auth: true));
+
+    request.fields['name'] = name;
+    request.fields['email'] = email;
+    request.fields['password'] = password;
+    request.fields['dob'] = dob.toIso8601String();
+    request.fields['role'] = role;
+    request.fields['rollNo'] = rollNo;
+    request.fields['semester'] = semester;
+    request.fields['section'] = section;
+    request.fields['branch'] = branch;
+
+    if (cabinRoom != null) request.fields['cabinRoom'] = cabinRoom;
+    if (availability != null) request.fields['availability'] = availability.toString();
+
+    if (profilePath.isNotEmpty) {
+      request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body);
+    } else {
+      final errorJson = jsonDecode(response.body);
+      throw Exception(errorJson['message'] ?? 'Failed to create user');
+    }
+  }
+
+  // Merged: Added cabinRoom and availability
+  static Future<void> updateUserById({
+    required String id,
+    String? name,
+    String? email,
+    String? password,
+    DateTime? dob,
+    String? role,
+    String? rollNo,
+    String? semester,
+    String? section,
+    String? branch,
+    String? profilePath,
+    String? cabinRoom,      // Merged
+    bool? availability,     // Merged
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/user/$id');
+    var request = http.MultipartRequest('PUT', uri);
+    request.headers.addAll(await _headers(auth: true));
+
+    if (name != null) request.fields['name'] = name;
+    if (email != null) request.fields['email'] = email;
+    if (password != null && password.isNotEmpty) request.fields['password'] = password;
+    if (dob != null) request.fields['dob'] = dob.toIso8601String();
+    if (role != null) request.fields['role'] = role;
+    if (rollNo != null) request.fields['rollNo'] = rollNo;
+    if (semester != null) request.fields['semester'] = semester;
+    if (section != null) request.fields['section'] = section;
+    if (branch != null) request.fields['branch'] = branch;
+    if (cabinRoom != null) request.fields['cabinRoom'] = cabinRoom;
+    if (availability != null) request.fields['availability'] = availability.toString();
+
+    if (profilePath != null && profilePath.isNotEmpty) {
+      request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
+    }
+
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    if (res.statusCode != 200) {
+      final err = jsonDecode(res.body);
+      throw Exception(err['message'] ?? 'Update failed: ${res.body}');
+    }
+  }
+
+  static Future<List<dynamic>> searchUsers(String query) async {
+    if (query.isEmpty) return [];
+    final response = await http.get(Uri.parse('$baseUrl/api/user/search?query=$query'), headers: await _headers(auth: true));
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to search users');
+  }
+
+  static Future<List<Map<String, dynamic>>> searchFriends(String query) async {
+    if (query.isEmpty) return [];
+    final uri = Uri.parse('$baseUrl/api/user/friend?query=$query');
+    try {
+      final response = await http.get(uri, headers: await _headers(auth: true));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      } else {
+        throw Exception('Failed to search friends');
+      }
+    } catch (e) {
+      print("Search Friend Error: $e");
+      return [];
+    }
+  }
+
+  static Future<List<TeacherSearchResult>> searchTeachers(String query) async {
+    if (query.isEmpty) return [];
+    final response = await http.get(Uri.parse('$baseUrl/api/user/teachers?search=$query'), headers: await _headers(auth: true));
+    if (response.statusCode == 200) {
+      List jsonResponse = json.decode(response.body);
+      return jsonResponse.map((item) => TeacherSearchResult.fromJson(item)).toList();
+    }
+    throw Exception('Failed to search teachers');
+  }
+
+  static Future<void> deleteUser(String id) async {
+    final response = await http.delete(Uri.parse('$baseUrl/api/user/$id'), headers: await _headers(auth: true));
+    if (response.statusCode != 200) throw Exception('Delete failed');
+  }
+
+  // ===========================================================================
+  // 4. COURSES
   // ===========================================================================
 
   static Future<void> addCourse(Map<String, dynamic> courseData) async {
@@ -118,7 +266,7 @@ class ApiService {
   }
 
   // ===========================================================================
-  // 4. TIMETABLE
+  // 5. TIMETABLE
   // ===========================================================================
 
   static Future<void> addTimetable(Map<String, dynamic> timetableData) async {
@@ -179,115 +327,6 @@ class ApiService {
       final body = jsonDecode(response.body);
       throw Exception(body['message'] ?? 'Failed to update slot');
     }
-  }
-
-  // ===========================================================================
-  // 5. USERS & SEARCH
-  // ===========================================================================
-
-  static Future<Map<String, dynamic>> createUserWithProfile({
-    required String name, required String email, required String password, required DateTime dob,
-    required String profilePath, required String role, required String rollNo,
-    required String semester, required String section, required String branch,
-  }) async {
-    final uri = Uri.parse('$baseUrl/api/user');
-    var request = http.MultipartRequest('POST', uri);
-    final headerMap = await _headers(auth: true);
-    request.headers.addAll(headerMap);
-
-    request.fields['name'] = name;
-    request.fields['email'] = email;
-    request.fields['password'] = password;
-    request.fields['dob'] = dob.toIso8601String();
-    request.fields['role'] = role;
-    request.fields['rollNo'] = rollNo;
-    request.fields['semester'] = semester;
-    request.fields['section'] = section;
-    request.fields['branch'] = branch;
-
-    if (profilePath.isNotEmpty) {
-      request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
-    }
-
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return jsonDecode(response.body);
-    }
-    throw Exception('Failed to create user');
-  }
-
-  static Future<List<dynamic>> searchUsers(String query) async {
-    if (query.isEmpty) return [];
-    final response = await http.get(Uri.parse('$baseUrl/api/user/search?query=$query'), headers: await _headers(auth: true));
-    if (response.statusCode == 200) return json.decode(response.body);
-    throw Exception('Failed to search users');
-  }
-
-  static Future<List<Map<String, dynamic>>> searchFriends(String query) async {
-    if (query.isEmpty) return [];
-
-    // Calls the specific /friend endpoint
-    final uri = Uri.parse('$baseUrl/api/user/friend?query=$query');
-
-    try {
-      final response = await http.get(
-        uri,
-        // Remove 'auth: true' if you made the route public, keep it if protected
-        headers: await _headers(auth: true),
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.cast<Map<String, dynamic>>();
-      } else {
-        throw Exception('Failed to search friends');
-      }
-    } catch (e) {
-      print("Search Friend Error: $e");
-      return [];
-    }
-  }
-
-  static Future<List<TeacherSearchResult>> searchTeachers(String query) async {
-    if (query.isEmpty) return [];
-    final response = await http.get(Uri.parse('$baseUrl/api/user/teachers?search=$query'), headers: await _headers(auth: true));
-    if (response.statusCode == 200) {
-      List jsonResponse = json.decode(response.body);
-      return jsonResponse.map((item) => TeacherSearchResult.fromJson(item)).toList();
-    }
-    throw Exception('Failed to search teachers');
-  }
-
-  static Future<void> updateUserById({
-    required String id, String? name, String? email, String? password, DateTime? dob,
-    String? role, String? rollNo, String? semester, String? section, String? branch, String? profilePath,
-  }) async {
-    final uri = Uri.parse('$baseUrl/api/user/$id');
-    var request = http.MultipartRequest('PUT', uri);
-    request.headers.addAll(await _headers(auth: true));
-
-    if (name != null) request.fields['name'] = name;
-    if (email != null) request.fields['email'] = email;
-    if (password != null && password.isNotEmpty) request.fields['password'] = password;
-    if (dob != null) request.fields['dob'] = dob.toIso8601String();
-    if (role != null) request.fields['role'] = role;
-    if (rollNo != null) request.fields['rollNo'] = rollNo;
-    if (semester != null) request.fields['semester'] = semester;
-    if (section != null) request.fields['section'] = section;
-    if (branch != null) request.fields['branch'] = branch;
-    if (profilePath != null && profilePath.isNotEmpty) {
-      request.files.add(await http.MultipartFile.fromPath('profile', profilePath));
-    }
-
-    final streamed = await request.send();
-    final res = await http.Response.fromStream(streamed);
-    if (res.statusCode != 200) throw Exception('Update failed: ${res.body}');
-  }
-
-  static Future<void> deleteUser(String id) async {
-    final response = await http.delete(Uri.parse('$baseUrl/api/user/$id'), headers: await _headers(auth: true));
-    if (response.statusCode != 200) throw Exception('Delete failed');
   }
 
   // ===========================================================================
@@ -391,11 +430,11 @@ class ApiService {
       throw e;
     }
   }
+
   // Used by Admin Page (Red/Green Dot Logic)
   static Future<List<Map<String, dynamic>>> searchRoomsWithStatus(
       String query, String day, int slotIndex) async {
     if (query.isEmpty) return [];
-    // FIX: Added /api prefix
     final uri = Uri.parse('$baseUrl/api/classrooms/search?query=$query&day=$day&slotIndex=$slotIndex');
     try {
       final response = await http.get(uri, headers: await _headers(auth: true));

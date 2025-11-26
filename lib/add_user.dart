@@ -24,6 +24,10 @@ class _AddUserPageState extends State<AddUserPage> {
   String branch = '';
   String semester = '';
   String section = '';
+
+  // --- Merged: Teacher Specific Variable ---
+  String cabinRoom = '';
+
   String role = 'student'; // Default role
   DateTime? dob;
   File? _profileFile;
@@ -149,6 +153,9 @@ class _AddUserPageState extends State<AddUserPage> {
       if (!enableSemester) semester = '';
       if (!enableSection) section = '';
 
+      // Clear teacher fields if not teacher
+      if (!isTeacher) cabinRoom = '';
+
       final result = await ApiService.createUserWithProfile(
         name: name,
         email: email,
@@ -160,6 +167,8 @@ class _AddUserPageState extends State<AddUserPage> {
         semester: semester,
         section: section,
         branch: branch,
+        // --- Merged: Sending Cabin Room ---
+        cabinRoom: isTeacher ? cabinRoom : null,
       );
 
       if (mounted) {
@@ -278,6 +287,8 @@ class _AddUserPageState extends State<AddUserPage> {
                       section = '';
                       rollNo = '';
                       branch = '';
+                      // Reset teacher fields
+                      cabinRoom = '';
                     });
                   }
                 },
@@ -325,7 +336,7 @@ class _AddUserPageState extends State<AddUserPage> {
               // 3. Roll No and Section Row
               Row(
                 children: [
-                  // Roll No (Student, ClassRep: Required | Admin: Optional | Others: Disabled)
+                  // Roll No
                   Expanded(
                     child: AbsorbPointer(
                       absorbing: !enableRollNo,
@@ -351,7 +362,7 @@ class _AddUserPageState extends State<AddUserPage> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Section (Student, ClassRep: Required | Admin: Optional | Others: Disabled)
+                  // Section
                   Expanded(
                     child: AbsorbPointer(
                       absorbing: !enableSection,
@@ -384,7 +395,7 @@ class _AddUserPageState extends State<AddUserPage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Semester (Student, ClassRep: Required | Admin: Optional | Others: Disabled)
+                  // Semester
                   Expanded(
                     child: AbsorbPointer(
                       absorbing: !enableSemester,
@@ -422,7 +433,7 @@ class _AddUserPageState extends State<AddUserPage> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Branch (Student, ClassRep, Teacher: Required | Admin: Optional | Staff: Disabled)
+                  // Branch
                   Expanded(
                     child: AbsorbPointer(
                       absorbing: !enableBranch,
@@ -451,6 +462,22 @@ class _AddUserPageState extends State<AddUserPage> {
                 ],
               ),
               const SizedBox(height: 15),
+
+              // --- MERGED: TEACHER SPECIFIC FIELD ---
+              if (isTeacher) ...[
+                TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Cabin Number',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.room),
+                  ),
+                  onSaved: (v) => cabinRoom = v?.trim() ?? '',
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Required for teacher'
+                      : null,
+                ),
+                const SizedBox(height: 15),
+              ],
 
               // 5. DOB Picker (Required for ALL roles)
               InkWell(

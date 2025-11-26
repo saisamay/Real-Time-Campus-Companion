@@ -20,14 +20,17 @@ class _EditUserPageState extends State<EditUserPage> {
   String? _selectedUserId;
   String? _currentProfileUrl;
 
-  // CONTROLLERS (The Fix)
+  // --- CONTROLLERS ---
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _rollNoCtrl = TextEditingController();
   final _branchCtrl = TextEditingController();
-  final _semesterCtrl = TextEditingController(); // Can be used if dropdown fails
+  final _semesterCtrl = TextEditingController();
   final _sectionCtrl = TextEditingController();
+
+  // Merged: Controller for Cabin Room
+  final _cabinCtrl = TextEditingController();
 
   // State Variables
   String role = 'student';
@@ -40,6 +43,7 @@ class _EditUserPageState extends State<EditUserPage> {
   String? _selectedSemester;
   final List<String> _roleOptions = ['student', 'classrep', 'teacher', 'admin', 'staff'];
 
+  // Role Helpers
   bool get isStudent => role == 'student' || role == 'classrep';
   bool get isTeacher => role == 'teacher';
   bool get isAdmin => role == 'admin';
@@ -58,6 +62,7 @@ class _EditUserPageState extends State<EditUserPage> {
     _branchCtrl.dispose();
     _semesterCtrl.dispose();
     _sectionCtrl.dispose();
+    _cabinCtrl.dispose(); // Dispose cabin controller
     super.dispose();
   }
 
@@ -117,7 +122,11 @@ class _EditUserPageState extends State<EditUserPage> {
       _rollNoCtrl.text = user['rollNo'] ?? '';
       _branchCtrl.text = user['branch'] ?? '';
       _sectionCtrl.text = user['section'] ?? '';
-      _passwordCtrl.clear(); // Password usually reset only on demand
+
+      // Merged: Populate Cabin Room
+      _cabinCtrl.text = user['cabinRoom'] ?? '';
+
+      _passwordCtrl.clear();
 
       role = user['role'] ?? 'student';
       String sem = user['semester'] ?? '';
@@ -151,6 +160,7 @@ class _EditUserPageState extends State<EditUserPage> {
       _branchCtrl.clear();
       _sectionCtrl.clear();
       _passwordCtrl.clear();
+      _cabinCtrl.clear(); // Clear cabin
       _selectedSemester = null;
       _newProfileFile = null;
       _currentProfileUrl = null;
@@ -160,7 +170,6 @@ class _EditUserPageState extends State<EditUserPage> {
   Future<void> _updateUser() async {
     if (_selectedUserId == null) return;
     if (!_formKey.currentState!.validate()) return;
-    // No need to save(), we use controllers
 
     setState(() => _isSubmitting = true);
     try {
@@ -168,6 +177,10 @@ class _EditUserPageState extends State<EditUserPage> {
       String sendBranch = enableBranch ? _branchCtrl.text.trim() : '';
       String sendSem = enableSemester ? (_selectedSemester ?? '') : '';
       String sendSec = enableSection ? _sectionCtrl.text.trim() : '';
+
+      // Merged: Logic to handle Cabin Room updates
+      // If not teacher, send empty string to clear it in DB
+      String sendCabin = isTeacher ? _cabinCtrl.text.trim() : '';
 
       await ApiService.updateUserById(
         id: _selectedUserId!,
@@ -180,6 +193,7 @@ class _EditUserPageState extends State<EditUserPage> {
         semester: sendSem,
         section: sendSec,
         branch: sendBranch,
+        cabinRoom: sendCabin, // Pass to API
         profilePath: _newProfileFile?.path,
       );
 
@@ -417,6 +431,21 @@ class _EditUserPageState extends State<EditUserPage> {
                       ],
                     ),
                     const SizedBox(height: 15),
+
+                    // --- Merged: Teacher Cabin Field ---
+                    if (isTeacher)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 15),
+                        child: TextFormField(
+                          controller: _cabinCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Cabin Number',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.room),
+                          ),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required for teacher' : null,
+                        ),
+                      ),
 
                     // DOB
                     InkWell(

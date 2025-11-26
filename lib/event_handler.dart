@@ -1,9 +1,9 @@
-// lib/event_handler.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart'; // Make sure to add this dependency
+import 'package:url_launcher/url_launcher.dart';
 import 'api_service.dart';
 
+// --- Event Model ---
 class Event {
   String id;
   String title;
@@ -40,6 +40,7 @@ class Event {
   }
 }
 
+// --- Page Widget ---
 class EventHandlerPage extends StatefulWidget {
   const EventHandlerPage({super.key});
 
@@ -65,56 +66,52 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
     });
 
     try {
-      // Now this will work because we added getAllEvents to ApiService
       final eventsData = await ApiService.getAllEvents();
       final events = eventsData.map((e) => Event.fromJson(e)).toList();
 
-      // Sort by date
+      // Sort by date (earliest first)
       events.sort((a, b) => a.date.compareTo(b.date));
 
-      setState(() {
-        _events = events;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _events = events;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
-  // Helper to open the URL
   Future<void> _launchURL(String urlString) async {
     if (urlString.trim().isEmpty) return;
     final Uri url = Uri.parse(urlString);
     try {
       if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch $urlString')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not launch $urlString')),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Invalid URL: $urlString')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid URL format')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manage Events'),
-        elevation: 2,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadEvents,
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
+      // No AppBar here because AdminHomePage already provides one.
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -124,7 +121,8 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
           : RefreshIndicator(
         onRefresh: _loadEvents,
         child: ListView.builder(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.only(
+              left: 16, right: 16, top: 16, bottom: 80),
           itemCount: _events.length,
           itemBuilder: (context, index) {
             return _buildEventCard(_events[index]);
@@ -143,6 +141,8 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
     );
   }
 
+  // --- UI Components ---
+
   Widget _buildErrorView() {
     return Center(
       child: Padding(
@@ -155,17 +155,14 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
             Text(
               'Failed to load events',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700]),
             ),
             const SizedBox(height: 8),
-            Text(
-              _error ?? 'Unknown error',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
+            Text(_error ?? 'Unknown error',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600])),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _loadEvents,
@@ -188,16 +185,13 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
           Text(
             'No Events Yet',
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
-            ),
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600]),
           ),
           const SizedBox(height: 10),
-          Text(
-            'Tap the button below to add your first event',
-            style: TextStyle(fontSize: 16, color: Colors.grey[500]),
-          ),
+          Text('Tap the button below to add your first event',
+              style: TextStyle(fontSize: 16, color: Colors.grey[500])),
         ],
       ),
     );
@@ -211,7 +205,7 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Event Image
+          // Image Section
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: Stack(
@@ -232,43 +226,27 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                         ),
                       ),
                       child: const Center(
-                        child: Icon(Icons.event, size: 60, color: Colors.white),
-                      ),
+                          child:
+                          Icon(Icons.event, size: 60, color: Colors.white)),
                     ),
                   ),
                 ),
-                // Action buttons overlay
+                // Floating Action Buttons on Card
                 Positioned(
                   top: 8,
                   right: 8,
                   child: Row(
                     children: [
-                      // Edit button
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.white),
-                          onPressed: () =>
-                              _showAddEditEventDialog(context, event: event),
-                          tooltip: 'Edit Event',
-                        ),
+                      _actionIcon(
+                        Icons.edit,
+                        Colors.blue,
+                            () => _showAddEditEventDialog(context, event: event),
                       ),
                       const SizedBox(width: 8),
-                      // Delete button
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.white),
-                          onPressed: () =>
-                              _showDeleteConfirmation(context, event),
-                          tooltip: 'Delete Event',
-                        ),
+                      _actionIcon(
+                        Icons.delete,
+                        Colors.red,
+                            () => _showDeleteConfirmation(context, event),
                       ),
                     ],
                   ),
@@ -276,8 +254,7 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
               ],
             ),
           ),
-
-          // Event Details
+          // Content Section
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -286,9 +263,7 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                 Text(
                   event.title,
                   style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -309,27 +284,23 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-
-                // --- FIXED LINK SECTION ---
-                // Using GestureDetector to make it clickable without changing the UI design
+                // Link Section
                 if (event.registrationLink.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  GestureDetector(
+                  const SizedBox(height: 12),
+                  InkWell(
                     onTap: () => _launchURL(event.registrationLink),
                     child: Row(
-                      children: [
-                        const Icon(Icons.link, size: 16, color: Colors.blue),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'External Registration Link',
-                          style: TextStyle(color: Colors.blue, fontSize: 14),
-                        ),
+                      children: const [
+                        Icon(Icons.link, size: 18, color: Colors.blue),
+                        SizedBox(width: 6),
+                        Text('Registration Link',
+                            style: TextStyle(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
                 ],
-                // -------------------------
-
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -338,9 +309,8 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                     Text(
                       '${event.regulations.length} Regulations',
                       style: TextStyle(
-                        color: Colors.green[700],
-                        fontWeight: FontWeight.w600,
-                      ),
+                          color: Colors.green[700],
+                          fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -352,22 +322,37 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
     );
   }
 
-  // Add/Edit Event Dialog
+  Widget _actionIcon(IconData icon, Color color, VoidCallback onTap) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white, size: 20),
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        padding: EdgeInsets.zero,
+        onPressed: onTap,
+      ),
+    );
+  }
+
+  // --- Dialogs ---
+
   void _showAddEditEventDialog(BuildContext context, {Event? event}) {
     final isEdit = event != null;
-    final titleController = TextEditingController(text: event?.title ?? '');
-    final descriptionController =
-    TextEditingController(text: event?.description ?? '');
-    final imageUrlController =
-    TextEditingController(text: event?.imageUrl ?? '');
-    final linkController =
-    TextEditingController(text: event?.registrationLink ?? '');
+    final titleCtrl = TextEditingController(text: event?.title ?? '');
+    final descCtrl = TextEditingController(text: event?.description ?? '');
+    final imgCtrl = TextEditingController(text: event?.imageUrl ?? '');
+    final linkCtrl = TextEditingController(text: event?.registrationLink ?? '');
 
-    DateTime selectedDate = event?.date ?? DateTime.now().add(const Duration(days: 1));
+    DateTime selectedDate =
+        event?.date ?? DateTime.now().add(const Duration(days: 1));
     List<String> regulations = List.from(event?.regulations ?? ['']);
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -379,35 +364,30 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header
+                    // Dialog Header
                     Container(
                       padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: Colors.deepPurple,
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(20)),
+                        borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(20)),
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            isEdit ? Icons.edit : Icons.add_circle,
-                            color: Colors.white,
-                            size: 28,
-                          ),
+                          Icon(isEdit ? Icons.edit : Icons.add_circle,
+                              color: Colors.white, size: 28),
                           const SizedBox(width: 12),
                           Text(
                             isEdit ? 'Edit Event' : 'Add New Event',
                             style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                     ),
-
-                    // Form content
+                    // Dialog Body
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(20),
@@ -415,7 +395,7 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             TextField(
-                              controller: titleController,
+                              controller: titleCtrl,
                               decoration: InputDecoration(
                                 labelText: 'Event Title',
                                 prefixIcon: const Icon(Icons.title),
@@ -424,9 +404,8 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                               ),
                             ),
                             const SizedBox(height: 16),
-
                             TextField(
-                              controller: descriptionController,
+                              controller: descCtrl,
                               maxLines: 3,
                               decoration: InputDecoration(
                                 labelText: 'Description',
@@ -436,12 +415,10 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                               ),
                             ),
                             const SizedBox(height: 16),
-
                             TextField(
-                              controller: linkController,
+                              controller: linkCtrl,
                               decoration: InputDecoration(
-                                labelText:
-                                'Registration Link (Google/Microsoft Forms)',
+                                labelText: 'Registration Link (Optional)',
                                 hintText: 'https://forms.google.com/...',
                                 prefixIcon: const Icon(Icons.link),
                                 border: OutlineInputBorder(
@@ -449,7 +426,6 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                               ),
                             ),
                             const SizedBox(height: 16),
-
                             // Date Picker
                             InkWell(
                               onTap: () async {
@@ -460,9 +436,7 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                                   lastDate: DateTime(2100),
                                 );
                                 if (date != null) {
-                                  setDialogState(() {
-                                    selectedDate = date;
-                                  });
+                                  setDialogState(() => selectedDate = date);
                                 }
                               },
                               child: Container(
@@ -477,17 +451,15 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                                         color: Colors.deepPurple),
                                     const SizedBox(width: 12),
                                     Text(
-                                      'Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
+                                        'Date: ${DateFormat('MMM dd, yyyy').format(selectedDate)}',
+                                        style: const TextStyle(fontSize: 16)),
                                   ],
                                 ),
                               ),
                             ),
                             const SizedBox(height: 16),
-
                             TextField(
-                              controller: imageUrlController,
+                              controller: imgCtrl,
                               decoration: InputDecoration(
                                 labelText: 'Image URL',
                                 prefixIcon: const Icon(Icons.image),
@@ -496,21 +468,17 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                               ),
                             ),
                             const SizedBox(height: 16),
-
+                            // Regulations List
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Regulations',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold),
-                                ),
+                                const Text('Regulations',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold)),
                                 TextButton.icon(
                                   onPressed: () {
-                                    setDialogState(() {
-                                      regulations.add('');
-                                    });
+                                    setDialogState(() => regulations.add(''));
                                   },
                                   icon: const Icon(Icons.add),
                                   label: const Text('Add Rule'),
@@ -534,15 +502,13 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 12, vertical: 8),
                                         ),
-                                        onChanged: (value) {
-                                          regulations[idx] = value;
-                                        },
+                                        onChanged: (val) =>
+                                        regulations[idx] = val,
                                         controller: TextEditingController(
                                             text: regulations[idx])
-                                          ..selection =
-                                          TextSelection.collapsed(
-                                              offset: regulations[idx]
-                                                  .length),
+                                          ..selection = TextSelection.collapsed(
+                                              offset:
+                                              regulations[idx].length),
                                       ),
                                     ),
                                     if (regulations.length > 1)
@@ -550,9 +516,8 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                                         icon: const Icon(Icons.remove_circle,
                                             color: Colors.red),
                                         onPressed: () {
-                                          setDialogState(() {
-                                            regulations.removeAt(idx);
-                                          });
+                                          setDialogState(
+                                                  () => regulations.removeAt(idx));
                                         },
                                       ),
                                   ],
@@ -563,8 +528,7 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                         ),
                       ),
                     ),
-
-                    // Action buttons
+                    // Dialog Actions
                     Padding(
                       padding: const EdgeInsets.all(20),
                       child: Row(
@@ -578,90 +542,78 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12)),
                               ),
-                              child: const Text('Cancel',
-                                  style: TextStyle(fontSize: 16)),
+                              child: const Text('Cancel'),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () async {
-                                if (titleController.text.isEmpty) {
+                                if (titleCtrl.text.isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content:
-                                        Text('Please enter event title')),
-                                  );
+                                      const SnackBar(
+                                          content:
+                                          Text('Please enter event title'),
+                                          backgroundColor: Colors.orange));
                                   return;
                                 }
-
                                 try {
+                                  final cleanRegs = regulations
+                                      .where((r) => r.trim().isNotEmpty)
+                                      .toList();
+                                  final defaultImg =
+                                      'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800';
+                                  final finalImg = imgCtrl.text.isEmpty
+                                      ? defaultImg
+                                      : imgCtrl.text;
+
                                   if (isEdit) {
                                     await ApiService.updateEvent(
                                       eventId: event.id,
-                                      title: titleController.text,
-                                      description: descriptionController.text,
+                                      title: titleCtrl.text,
+                                      description: descCtrl.text,
                                       date: selectedDate,
-                                      imageUrl: imageUrlController.text.isEmpty
-                                          ? 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800'
-                                          : imageUrlController.text,
-                                      regulations: regulations
-                                          .where((r) => r.isNotEmpty)
-                                          .toList(),
-                                      registrationLink:
-                                      linkController.text.trim(),
+                                      imageUrl: finalImg,
+                                      regulations: cleanRegs,
+                                      registrationLink: linkCtrl.text.trim(),
                                     );
                                   } else {
                                     await ApiService.createEvent(
-                                      title: titleController.text,
-                                      description: descriptionController.text,
+                                      title: titleCtrl.text,
+                                      description: descCtrl.text,
                                       date: selectedDate,
-                                      imageUrl: imageUrlController.text.isEmpty
-                                          ? 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800'
-                                          : imageUrlController.text,
-                                      regulations: regulations
-                                          .where((r) => r.isNotEmpty)
-                                          .toList(),
-                                      registrationLink:
-                                      linkController.text.trim(),
+                                      imageUrl: finalImg,
+                                      regulations: cleanRegs,
+                                      registrationLink: linkCtrl.text.trim(),
                                     );
                                   }
-
-                                  // Reload events
                                   await _loadEvents();
-
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(isEdit
-                                          ? 'Event updated successfully!'
-                                          : 'Event added successfully!'),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
+                                  if (context.mounted) Navigator.pop(context);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                            content: Text('Success!'),
+                                            backgroundColor: Colors.green));
+                                  }
                                 } catch (e) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Error: ${e.toString()}'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
+                                      SnackBar(
+                                          content: Text('Error: $e'),
+                                          backgroundColor: Colors.red));
                                 }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.deepPurple,
+                                foregroundColor: Colors.white,
                                 padding:
                                 const EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12)),
                               ),
-                              child: Text(
-                                isEdit ? 'Update' : 'Add Event',
-                                style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold),
-                              ),
+                              child: Text(isEdit ? 'Update' : 'Add Event',
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold)),
                             ),
                           ),
                         ],
@@ -680,61 +632,40 @@ class _EventHandlerPageState extends State<EventHandlerPage> {
   void _showDeleteConfirmation(BuildContext context, Event event) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: Colors.orange[700], size: 28),
-              const SizedBox(width: 12),
-              const Text('Delete Event?'),
-            ],
-          ),
-          content: Text(
-            'Are you sure you want to delete "${event.title}"? This action cannot be undone.',
-            style: const TextStyle(fontSize: 16),
-          ),
-          actions: [
-            TextButton(
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+          SizedBox(width: 12),
+          Text('Delete Event?')
+        ]),
+        content: Text('Are you sure you want to delete "${event.title}"?'),
+        actions: [
+          TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(fontSize: 16)),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  await ApiService.deleteEvent(event.id);
-                  await _loadEvents();
-
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Event deleted successfully!'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                } catch (e) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: ${e.toString()}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              try {
+                await ApiService.deleteEvent(event.id);
+                await _loadEvents();
+                if (context.mounted) Navigator.pop(context);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Deleted'), backgroundColor: Colors.red));
                 }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Delete',
-                  style: TextStyle(fontSize: 16, color: Colors.white)),
-            ),
-          ],
-        );
-      },
+              } catch (e) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Error: $e'), backgroundColor: Colors.red));
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 }

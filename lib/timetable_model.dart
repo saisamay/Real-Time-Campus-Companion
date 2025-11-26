@@ -1,13 +1,22 @@
 import 'dart:convert';
 
-// --- SEARCH RESULT MODEL (For Admin Dropdown) ---
+// --- SEARCH RESULT MODEL (For Teacher Search & Dropdowns) ---
 class TeacherSearchResult {
   final String id;
   final String name;
   final String dept;
   final String? image;
+  final String cabinRoom; // Merged from Friend's Code
+  final bool availability; // Merged from Friend's Code
 
-  TeacherSearchResult({required this.id, required this.name, required this.dept, this.image});
+  TeacherSearchResult({
+    required this.id,
+    required this.name,
+    required this.dept,
+    this.image,
+    this.cabinRoom = 'Not Assigned',
+    this.availability = false,
+  });
 
   factory TeacherSearchResult.fromJson(Map<String, dynamic> json) {
     return TeacherSearchResult(
@@ -15,6 +24,9 @@ class TeacherSearchResult {
       name: json['name'] ?? '',
       dept: json['dept'] ?? '',
       image: json['image'],
+      cabinRoom: json['cabinRoom'] ?? 'Not Assigned',
+      // Safe parsing for availability boolean
+      availability: json['availability'] == true || json['availability'].toString() == 'true',
     );
   }
 }
@@ -28,8 +40,8 @@ class Course {
   final String semester;
   final String section;
   final String facultyName;
-  final String facultyImage; // <--- Added
-  final String facultyDept;  // <--- Added
+  final String facultyImage;
+  final String facultyDept;
   final String color;
 
   Course({
@@ -75,7 +87,7 @@ class TimetableSlot {
   String? newRoom;
   String displayContext;
 
-  // NEW FIELDS
+  // Merged Fields from Code B (Useful for future schedule logic)
   String startTime;
   String endTime;
 
@@ -91,8 +103,8 @@ class TimetableSlot {
     this.isCancelled = false,
     this.newRoom,
     this.displayContext = '',
-    this.startTime = '', // Default empty
-    this.endTime = '',   // Default empty
+    this.startTime = '',
+    this.endTime = '',
   });
 
   factory TimetableSlot.fromJson(Map<String, dynamic> json) {
@@ -131,17 +143,23 @@ class TimetableSlot {
   }
 }
 
-// ... TimetableDay and Timetable classes remain the same ...
-// (Just make sure to keep them in the file as they were)
 class TimetableDay {
   final String dayName;
   final List<TimetableSlot> slots;
   TimetableDay({required this.dayName, required this.slots});
+
   factory TimetableDay.fromJson(Map<String, dynamic> json) {
     var list = json['slots'] as List;
-    return TimetableDay(dayName: json['dayName'], slots: list.map((i) => TimetableSlot.fromJson(i)).toList());
+    return TimetableDay(
+        dayName: json['dayName'],
+        slots: list.map((i) => TimetableSlot.fromJson(i)).toList()
+    );
   }
-  Map<String, dynamic> toJson() => {'dayName': dayName, 'slots': slots.map((e) => e.toJson()).toList()};
+
+  Map<String, dynamic> toJson() => {
+    'dayName': dayName,
+    'slots': slots.map((e) => e.toJson()).toList()
+  };
 }
 
 class Timetable {
@@ -149,7 +167,14 @@ class Timetable {
   final String branch;
   final String section;
   final List<TimetableDay> grid;
-  Timetable({required this.semester, required this.branch, required this.section, required this.grid});
+
+  Timetable({
+    required this.semester,
+    required this.branch,
+    required this.section,
+    required this.grid
+  });
+
   factory Timetable.fromJson(Map<String, dynamic> json) {
     var list = json['grid'] as List;
     return Timetable(

@@ -1,17 +1,16 @@
+import 'dart:io'; // Added for FileImage support
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'api_service.dart';
 import 'timetable_model.dart';
 import 'find_teacher_page.dart';
-import 'find_classroom_page.dart';
 import 'student_timetable_page.dart';
 import 'main.dart';
 import 'profile_page.dart';
-import 'emptyclassrooms_page.dart'; // CR uses this (Edit access)
+import 'emptyclassrooms_page.dart';
 import 'Events_page.dart';
 import 'find_friend_page.dart';
 
-// Class Representative Home Page Class
 class HomePage extends StatefulWidget {
   final String universityName;
   final bool isDark;
@@ -60,7 +59,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     'https://picsum.photos/1200/600?random=3',
   ];
 
-  // Slot start times (24h format) matches student_timetable_page
+  // Slot start times (24h format)
   final List<String> _slotStartTimes = [
     '09:00', '09:50', '10:50', '11:40', '12:30', '13:20', '14:10', '15:10', '16:00'
   ];
@@ -69,7 +68,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _index);
-    // Initialize with data passed from Login/Main
+    // Initialize variables
     selectedDept = (widget.branch ?? 'EEE').toUpperCase();
     selectedSection = (widget.section ?? 'A').toUpperCase();
     selectedSemester = (widget.semester ?? '5');
@@ -82,7 +81,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Future<void> _fetchTimetable() async {
     try {
-      // Use the CR's class details to fetch the timetable for the Dashboard card
       final timetable = await ApiService.getTimetable(
         selectedDept,
         selectedSemester,
@@ -118,6 +116,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   void _updateUserName(String name) => setState(() => userName = name);
   void _updateUserEmail(String email) => setState(() => userEmail = email);
 
+  // --- Helper: Smart Image Provider (Fixes Profile Show Issue) ---
+  ImageProvider _imageProvider(String? url) {
+    if (url == null || url.isEmpty) {
+      return const NetworkImage("https://i.pravatar.cc/150?img=3");
+    }
+    if (url.startsWith('http') || url.startsWith('https')) {
+      return NetworkImage(url);
+    }
+    // Assuming local file path for uploaded images
+    return FileImage(File(url));
+  }
+
   // --- LOGIC TO FIND NEXT CLASS ---
   Map<String, dynamic>? _getNextClassInfo() {
     if (_fullTimetable == null) return null;
@@ -131,7 +141,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     }
 
     int currentMinutes = now.hour * 60 + now.minute;
-    int todayWeekdayIndex = now.weekday - 1; // Mon=0, Sun=6
+    int todayWeekdayIndex = now.weekday - 1;
 
     // 1. Check Today
     if (todayWeekdayIndex >= 0 && todayWeekdayIndex < 5) {
@@ -142,7 +152,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       );
 
       for (int i = 0; i < _slotStartTimes.length; i++) {
-        // If slot hasn't passed yet
         if (toMinutes(_slotStartTimes[i]) > currentMinutes) {
           if (i < todayData.slots.length) {
             final slot = todayData.slots[i];
@@ -158,7 +167,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       }
     }
 
-    // 2. Check Tomorrow (or Monday if today is Fri/Sat/Sun)
+    // 2. Check Next Day
     int nextDayIndex = (todayWeekdayIndex + 1) % 7;
     if (nextDayIndex > 4) nextDayIndex = 0;
 
@@ -232,7 +241,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 20),
 
-        // --- NEXT CLASS WIDGET ---
+        // --- NEXT CLASS CARD ---
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: _buildNextClassCard(scheme, isDark),
@@ -566,6 +575,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
             onPressed: () {
+              // Toggle theme
               setState(() {
                 _isDark = !_isDark;
               });
@@ -610,11 +620,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             ),
                           ],
                         ),
-                        child: const CircleAvatar(
+                        // --- FIXED: Dynamic Profile Image ---
+                        child: CircleAvatar(
                           radius: 35,
-                          backgroundImage: NetworkImage(
-                            "https://i.pravatar.cc/150?img=3",
-                          ),
+                          backgroundImage: _imageProvider(widget.profile),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -697,13 +706,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                   _buildDrawerItem(
                     icon: Icons.search_rounded,
-                    title: "Find Friend Class Room", // Or "Find Friend"
+                    title: "Find Friend Class Room",
                     onTap: () {
-                      Navigator.pop(context); // Close the drawer first
+                      Navigator.pop(context);
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const FindFriendPage(), // Navigate to new page
+                          builder: (_) => const FindFriendPage(),
                         ),
                       );
                     },
@@ -763,7 +772,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         onPageChanged: (i) => setState(() => _index = i),
         children: [
           _homePage(context),
-          // FIXED: Pass parameters without using 'const' because variables are non-constant
           StudentTimetablePage(
             embedded: true,
             initialBranch: selectedDept,
@@ -778,6 +786,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             userEmail: userEmail,
             dept: selectedDept,
             section: selectedSection,
+            initialPhotoUrl: widget.profile,
             isDark: _isDark,
             onToggleTheme: (bool isDark) {
               setState(() => _isDark = isDark);
