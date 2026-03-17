@@ -1,9 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // ADD THIS
 
 // --- Page Imports ---
 import 'home_page.dart';
@@ -17,52 +14,8 @@ import 'api_service.dart';
 const maroonColor = Color(0xFFA4123F);
 const goldColor = Color(0xFFD4AF37);
 
-// --- 1. NOTIFICATION CHANNEL SETUP ---
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-FlutterLocalNotificationsPlugin();
-
-// Define the Android Channel (High Importance for Heads-up Display)
-const AndroidNotificationChannel channel = AndroidNotificationChannel(
-  'high_importance_channel', // id
-  'High Importance Notifications', // title
-  description: 'This channel is used for important notifications.',
-  importance: Importance.max,
-);
-
-// --- 2. BACKGROUND HANDLER (Must be top-level) ---
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  print("Handling a background message: ${message.messageId}");
-}
-
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  try {
-    await Firebase.initializeApp();
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // Initialize flutter_local_notifications
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    final initSettings = InitializationSettings(
-      android: androidInit,
-      iOS: null,
-      macOS: null,
-      linux: null,
-    );
-
-    await flutterLocalNotificationsPlugin.initialize(initSettings);
-
-    // Create the channel on the device (Android)
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-  } catch (e) {
-    print("Firebase / Local Notification initialization failed: $e");
-  }
-
   runApp(const RootApp());
 }
 
@@ -86,83 +39,16 @@ class _RootAppState extends State<RootApp> {
 
   Future<void> _initializeData() async {
     await _loadTheme();
-    await _setupNotifications();
     await _checkAutoLogin(); // Check if user is already logged in
   }
 
-  // --- 3. NOTIFICATION LOGIC (FOREGROUND) ---
-  Future<void> _setupNotifications() async {
-    FirebaseMessaging messaging = FirebaseMessaging.instance;
-
-    // A. Request Permission
-    NotificationSettings settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('User granted permission');
-
-      // B. Get Token & Sync with Backend (CRITICAL FIX)
-      try {
-        String? token = await messaging.getToken();
-        if (token != null) {
-          print("FCM Token on Startup: $token");
-          // We only sync if logged in, handled inside _checkAutoLogin or Login
-        }
-      } catch (e) {
-        print("Error getting FCM token on startup: $e");
-      }
-    }
-
-    // C. Handle Foreground Messages (Show Banner)
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      RemoteNotification? notification = message.notification;
-      AndroidNotification? android = message.notification?.android;
-
-      if (notification != null) {
-        // Show local notification (Banner)
-        final androidDetails = AndroidNotificationDetails(
-          channel.id,
-          channel.name,
-          channelDescription: channel.description,
-          icon: '@mipmap/ic_launcher', // Ensure you have an icon resource
-          importance: Importance.max,
-          priority: Priority.high,
-          color: maroonColor,
-        );
-
-        final platformDetails = NotificationDetails(android: androidDetails);
-
-        flutterLocalNotificationsPlugin.show(
-          notification.hashCode,
-          notification.title,
-          notification.body,
-          platformDetails,
-        );
-      }
-    });
-  }
-
-  // --- 4. AUTO-LOGIN LOGIC ---
+  // --- AUTO-LOGIN LOGIC ---
   Future<void> _checkAutoLogin() async {
     try {
       final token = await ApiService.readToken();
       final user = await ApiService.readUserProfile();
 
       if (token != null && user != null) {
-        // User is logged in. Sync FCM Token now!
-        try {
-          String? fcmToken = await FirebaseMessaging.instance.getToken();
-          if (fcmToken != null) {
-            await ApiService.updateFcmToken(fcmToken);
-            print("✅ FCM Token auto-synced on startup");
-          }
-        } catch (e) {
-          print("⚠️ Auto-sync FCM failed: $e");
-        }
-
         // Determine Page
         final role = (user['role'] as String?)?.toLowerCase() ?? 'student';
         _startPage = _getPageForRole(role, user);
@@ -275,11 +161,6 @@ class _RootAppState extends State<RootApp> {
   }
 }
 
-// -----------------------------------------------------------------------------
-// Keep your LoginPage class and _FloatingOrb class exactly as they were
-// (from your original file). Paste them below — unchanged.
-// -----------------------------------------------------------------------------
-
 class LoginPage extends StatefulWidget {
   final bool isDark;
   final ValueChanged<bool> onToggleTheme;
@@ -301,7 +182,6 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _loading = false;
 
-  // Helper method to create floating orbs
   List<Widget> _buildFloatingOrbs() {
     return [
       Positioned(
@@ -336,33 +216,9 @@ class _LoginPageState extends State<LoginPage> {
     final password = _passwordController.text.trim();
 
     try {
-      // 1. Call API Login
       final res = await ApiService.login(email, password);
-
-      // 2. Extract User Data
       final user = res['user'] as Map<String, dynamic>? ?? {};
 
-      // --- 3. SYNC FCM TOKEN (New Feature) ---
-      try {
-        FirebaseMessaging messaging = FirebaseMessaging.instance;
-        NotificationSettings settings = await messaging.requestPermission(
-          alert: true, badge: true, sound: true,
-        );
-
-        if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-          String? token = await messaging.getToken();
-          if (token != null) {
-            // Send Token to Backend to link it with this user
-            await ApiService.updateFcmToken(token);
-          }
-        }
-      } catch (e) {
-        print("FCM Token Sync Error: $e");
-        // Don't block login if FCM fails
-      }
-      // -------------------------------------
-
-      // 4. Parse Role & Details
       final rawRole = (user['role'] as String?)?.trim().toLowerCase() ?? '';
       final role = rawRole.isEmpty ? 'student' : rawRole;
 
@@ -371,15 +227,12 @@ class _LoginPageState extends State<LoginPage> {
       final branch = user['branch'] ?? 'N/A';
       final section = user['section'] ?? 'N/A';
       final semester = user['semester'];
-
-      // Critical: User ID for Teacher features
       final userId = user['id'] ?? user['_id'];
 
       final String? profile = (user['profile'] != null && user['profile'].toString().isNotEmpty)
           ? user['profile'].toString()
           : null;
 
-      // 5. Determine Destination Page
       Widget targetPage;
 
       if (role == 'teacher') {
@@ -387,7 +240,7 @@ class _LoginPageState extends State<LoginPage> {
           universityName: "Amrita Vishwa Vidyapeetham — Teacher",
           userName: userName,
           userEmail: userEmail,
-          userId: userId, // ✅ Passed ID specifically for Teacher
+          userId: userId,
           isDark: widget.isDark,
           onToggleTheme: widget.onToggleTheme,
         );
@@ -422,7 +275,6 @@ class _LoginPageState extends State<LoginPage> {
           semester: semester,
         );
       } else {
-        // Default: Student
         targetPage = StudentHomePage(
           universityName: _getUniversityNameForRole(role),
           userName: userName,
@@ -444,7 +296,6 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       if (mounted) {
-        // Clean up exception message
         final msg = e.toString().replaceAll("Exception: ", "");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.red),
@@ -490,10 +341,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         child: Stack(
           children: [
-            // Background Orbs
             ..._buildFloatingOrbs(),
-
-            // Content
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -502,7 +350,6 @@ class _LoginPageState extends State<LoginPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Logo Circle
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
@@ -533,10 +380,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 30),
-
-                        // Welcome Text
                         Text(
                           "Welcome Back",
                           style: TextStyle(
@@ -561,8 +405,6 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 40),
-
-                        // Glassmorphic Login Card
                         Container(
                           constraints: const BoxConstraints(maxWidth: 450),
                           decoration: BoxDecoration(
@@ -598,7 +440,6 @@ class _LoginPageState extends State<LoginPage> {
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      // Email Field
                                       TextFormField(
                                         controller: _emailController,
                                         style: const TextStyle(color: Colors.white),
@@ -616,8 +457,6 @@ class _LoginPageState extends State<LoginPage> {
                                         validator: (value) => value!.isEmpty ? "Enter email" : null,
                                       ),
                                       const SizedBox(height: 20),
-
-                                      // Password Field
                                       TextFormField(
                                         controller: _passwordController,
                                         obscureText: true,
@@ -635,10 +474,7 @@ class _LoginPageState extends State<LoginPage> {
                                         ),
                                         validator: (value) => value!.isEmpty ? "Enter password" : null,
                                       ),
-
                                       const SizedBox(height: 30),
-
-                                      // Login Button
                                       SizedBox(
                                         width: double.infinity,
                                         height: 56,
@@ -672,10 +508,7 @@ class _LoginPageState extends State<LoginPage> {
                                           ),
                                         ),
                                       ),
-
                                       const SizedBox(height: 12),
-
-                                      // Forgot Password
                                       TextButton(
                                         onPressed: () {
                                           Navigator.push(
@@ -713,7 +546,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-// Animated floating orb widget
 class _FloatingOrb extends StatefulWidget {
   final double size;
   final Color color;

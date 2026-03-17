@@ -3,16 +3,12 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
 }
 
 dependencies {
-  implementation(platform("com.google.firebase:firebase-bom:34.6.0"))
-
-  implementation("com.google.firebase:firebase-analytics")
-  implementation("androidx.multidex:multidex:2.0.1")
-  
-  coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // Removed Firebase dependencies
+    implementation("androidx.multidex:multidex:2.0.1")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 android {
@@ -23,8 +19,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
-
-	isCoreLibraryDesugaringEnabled = true
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -32,9 +27,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.real_time_campus_companion"
-	minSdk = flutter.minSdkVersion
+        minSdk = flutter.minSdkVersion
         multiDexEnabled = true
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -43,8 +37,6 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

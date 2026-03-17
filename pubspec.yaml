@@ -46,6 +46,9 @@ dependencies:
   mime: ^1.0.2
   path: ^1.8.3
   url_launcher: ^6.3.0
+  firebase_core: ^4.5.0
+  firebase_messaging: ^16.1.2
+  flutter_local_notifications: ^21.0.0
 
 dev_dependencies:
   flutter_test:
